@@ -10,35 +10,29 @@
  * See the Mulan PubL v2 for more details.
  */
 
-#ifndef _OB_CREATE_MODEL_STMT_H
-#define _OB_CREATE_MODEL_STMT_H 1
+#ifndef _OB_CREATE_MODEL_RESOLVER_H
+#define _OB_CREATE_MODEL_RESOLVER_H 1
 
-#include "sql/resolver/ddl/ob_ddl_stmt.h"
-
+#include "sql/resolver/ddl/ob_create_python_udf_stmt.h"
+#include "sql/resolver/ddl/ob_ddl_resolver.h"
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_schema_struct.h"
 
 namespace oceanbase
 {
 namespace sql
 {
 
-class ObCreateModelStmt : public ObDDLStmt
+class ObCreatePythonUdfResolver : public ObDDLResolver
 {
 public:
-    ObCreateModelStmt() :
-        ObDDLStmt(stmt::T_CREATE_MODEL)
-    {}
-    ~ObCreateModelStmt() {}
+  explicit ObCreatePythonUdfResolver(ObResolverParams &params);
+  virtual ~ObCreatePythonUdfResolver();
 
-    obrpc::ObCreateModelArg &get_create_model_arg() {return create_model_arg_; }
-
-    virtual obrpc::ObDDLArg &get_ddl_arg() {return create_model_arg_; };
-
-private:
-    obrpc::ObCreateModelArg create_model_arg_;  
-    DISALLOW_COPY_AND_ASSIGN(ObCreateModelStmt);  
+  virtual int resolve(const ParseNode &parse_tree);
 };
 
 }
 }
 
-#endif /* _OB_CREATE_MODEL_STMT_H */
+#endif /* _OB_CREATE_MODEL_RESOLVER_H */

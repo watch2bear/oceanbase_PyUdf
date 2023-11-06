@@ -11,7 +11,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "sql/resolver/ddl/ob_drop_model_resolver.h"
+#include "sql/resolver/ddl/ob_drop_python_udf_resolver.h"
 
 namespace oceanbase
 {
@@ -19,25 +19,25 @@ using namespace common;
 namespace sql
 {
 
-ObDropModelResolver::ObDropModelResolver(ObResolverParams &params)
+ObDropPythonUdfResolver::ObDropPythonUdfResolver(ObResolverParams &params)
     : ObDDLResolver(params)
 {
 }
 
-ObDropModelResolver::~ObDropModelResolver()
+ObDropPythonUdfResolver::~ObDropPythonUdfResolver()
 {
 }
 
-int ObDropModelResolver::resolve(const ParseNode &parse_tree)
+int ObDropPythonUdfResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
-  ObDropModelStmt *drop_model_stmt = NULL;
+  ObDropPythonUdfStmt *drop_python_udf_stmt = NULL;
   ObCollationType cs_type;
   ObString lower_name;
   if (OB_ISNULL(session_info_)
       || OB_ISNULL(schema_checker_)
       || OB_ISNULL(allocator_)
-      || (T_DROP_MODEL != parse_tree.type_)
+      || (T_DROP_PYTHON_UDF != parse_tree.type_)
       || 2 != parse_tree.num_child_
       || OB_ISNULL(parse_tree.children_)
       || (parse_tree.children_[0] != NULL && T_IF_EXISTS != parse_tree.children_[0]->type_)) {
@@ -46,10 +46,10 @@ int ObDropModelResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
     LOG_WARN("failed to get collation", K(ret));
   } else {
-    ObString model_name(parse_tree.children_[1]->str_len_, parse_tree.children_[1]->str_value_);
-    if (OB_FAIL(ob_write_string(*allocator_, model_name, lower_name))) {
+    ObString udf_name(parse_tree.children_[1]->str_len_, parse_tree.children_[1]->str_value_);
+    if (OB_FAIL(ob_write_string(*allocator_, udf_name, lower_name))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("Malloc model name failed", K(ret));
+      LOG_ERROR("Malloc udf name failed", K(ret));
     } else {
       ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, lower_name);
     }
@@ -57,9 +57,9 @@ int ObDropModelResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret)) {
     // dll udf
-    if (OB_ISNULL(drop_model_stmt = create_stmt<ObDropModelStmt>())) {
+    if (OB_ISNULL(drop_python_udf_stmt = create_stmt<ObDropPythonUdfStmt>())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        SQL_RESV_LOG(ERROR, "create drop model stmt failed");
+        SQL_RESV_LOG(ERROR, "create drop python udf stmt failed");
     }
       //stmt_ = drop_func_stmt;
   }
@@ -67,10 +67,10 @@ int ObDropModelResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret)) {
     const uint64_t tenant_id = session_info_->get_effective_tenant_id();
-    obrpc::ObDropModelArg &drop_model_arg = drop_model_stmt->get_drop_model_arg();
-    drop_model_arg.tenant_id_ = tenant_id;
-    drop_model_arg.name_ = lower_name;
-    drop_model_arg.if_exist_ =  (NULL != parse_tree.children_[0]);
+    obrpc::ObDropPythonUdfArg &drop_python_udf_arg = drop_python_udf_stmt->get_drop_python_udf_arg();
+    drop_python_udf_arg.tenant_id_ = tenant_id;
+    drop_python_udf_arg.name_ = lower_name;
+    drop_python_udf_arg.if_exist_ =  (NULL != parse_tree.children_[0]);
   }
   return ret;
 }

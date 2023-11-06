@@ -10,29 +10,29 @@
  * See the Mulan PubL v2 for more details.
  */
 
-#ifndef _OB_DROP_MODEL_RESOLVER_H
-#define _OB_DROP_MODEL_RESOLVER_H 1
+#ifndef _OB_DROP_PYTHON_UDF_RESOLVER_H
+#define _OB_DROP_PYTHON_UDF_RESOLVER_H 1
 
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
-#include "sql/resolver/ddl/ob_drop_model_stmt.h"
+#include "sql/resolver/ddl/ob_drop_python_udf_stmt.h"
 
 namespace oceanbase
 {
 namespace sql
 {
 
-class ObDropModelResolver : public ObDDLResolver
+class ObDropPythonUdfResolver : public ObDDLResolver
 {
 public:
-  explicit ObDropModelResolver(ObResolverParams &params);
-  virtual ~ObDropModelResolver();
+  explicit ObDropPythonUdfResolver(ObResolverParams &params);
+  virtual ~ObDropPythonUdfResolver();
 
   virtual int resolve(const ParseNode &parse_tree);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObDropModelResolver);
+  DISALLOW_COPY_AND_ASSIGN(ObDropPythonUdfResolver);
 };
 
 }
 }
 
-#endif /* _OB_DROP_MODEL_RESOLVER_H */
+#endif /* _OB_DROP_Python_UDF_RESOLVER_H */

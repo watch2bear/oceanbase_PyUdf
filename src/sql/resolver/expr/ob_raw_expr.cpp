@@ -64,6 +64,7 @@ int ObRawExprFactory::create_raw_expr<ObSysFunRawExpr>(ObItemType expr_type, ObS
   switch (expr_type) {
     GENERATE_CASE(T_FUN_SYS_SEQ_NEXTVAL, ObSequenceRawExpr);
     GENERATE_CASE(T_FUN_NORMAL_UDF, ObNormalDllUdfRawExpr);
+    GENERATE_CASE(T_FUN_SYS_PYTHON_UDF, ObPythonUdfRawExpr);
     GENERATE_CASE(T_FUN_PL_COLLECTION_CONSTRUCT, ObCollectionConstructRawExpr);
     GENERATE_CASE(T_FUN_UDF, ObUDFRawExpr);
     GENERATE_CASE(T_FUN_PL_OBJECT_CONSTRUCT, ObObjectConstructRawExpr);
@@ -731,6 +732,7 @@ int ObRawExpr::is_const_inherit_expr(bool &is_const_inherit,
       || T_OP_ASSIGN == type_
       || T_OP_GET_USER_VAR == type_
       || T_FUN_NORMAL_UDF == type_
+      || T_FUN_SYS_PYTHON_UDF == type_
       || T_FUN_SYS_REMOVE_CONST == type_
       || T_FUN_SYS_WRAPPER_INNER == type_
       || T_FUN_SYS_LAST_INSERT_ID == type_
@@ -4192,6 +4194,68 @@ int ObNormalDllUdfRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
   return ret;
 }
 
+int ObPythonUdfRawExpr::assign(const ObRawExpr &other) {
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(this != &other)) {
+    if (OB_UNLIKELY(get_expr_class() != other.get_expr_class() ||
+                    get_expr_type() != other.get_expr_type())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid input expr", K(ret), K(other.get_expr_type()));
+    } else if (OB_FAIL(ObSysFunRawExpr::assign(other))) {
+      LOG_WARN("failed to assign sys raw expr");
+    } else {
+      const ObPythonUdfRawExpr &tmp =
+          static_cast<const ObPythonUdfRawExpr &>(other);
+      IGNORE_RETURN udf_meta_.assign(tmp.get_udf_meta());
+    }
+  }
+  return ret;
+}
+
+int ObPythonUdfRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObSysFunRawExpr::inner_deep_copy(copier))) {
+    LOG_WARN("copy in Base class ObSysRawExpr failed", K(ret));
+  } else if (copier.deep_copy_attributes()) {
+    if (OB_ISNULL(inner_alloc_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("inner allocator or expr factory is NULL", K(inner_alloc_), K(ret));
+    // wait for python udf meta defination
+    } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf_meta_.pycall_, udf_meta_.pycall_))) {
+      LOG_WARN("fail to write string", K(udf_meta_.pycall_), K(ret)); 
+    }
+  }
+  return ret;
+}
+
+int ObPythonUdfRawExpr::set_udf_meta(share::schema::ObPythonUDF &udf)
+{
+  int ret = OB_SUCCESS;
+  udf_meta_.init_ = false;
+  udf_meta_.ret_ = udf.get_ret();
+  /* data from schame, deep copy maybe a better choices */
+  if (OB_ISNULL(inner_alloc_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner allocator or expr factory is NULL", K(inner_alloc_), K(ret));
+  } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf.get_name_str(), udf_meta_.name_))) {
+    LOG_WARN("fail to write name", K(udf.get_name_str()), K(ret));
+  } else if (OB_FAIL(ob_write_string(*inner_alloc_, udf.get_pycall_str(), udf_meta_.pycall_))) {
+    LOG_WARN("fail to write pycall", K(udf.get_pycall_str()), K(ret));
+  } else if (OB_FAIL(udf.get_arg_types_arr(udf_meta_.udf_attributes_types_))){ 
+    LOG_WARN("fail to insert attributes types", K(udf.get_pycall_str()), K(ret));
+  }
+  return ret;
+}
+
+bool ObPythonUdfRawExpr::inner_same_as(const ObRawExpr &expr,
+                                       ObExprEqualCheckContext *check_context) const
+{
+  UNUSED(expr);
+  UNUSED(check_context);
+  return false;
+}
+
 int ObCollectionConstructRawExpr::set_access_names(
   const common::ObIArray<ObObjAccessIdent> &access_idents)
 {
@@ -6024,6 +6088,16 @@ int ObRawExprFactory::create_raw_expr(ObRawExpr::ExprClass expr_class,
       }
     } else if (T_FUN_NORMAL_UDF == expr_type) {
       ObNormalDllUdfRawExpr *dest_nudf = NULL;
+      if (OB_FAIL(create_raw_expr(expr_type, dest_nudf))) {
+        LOG_WARN("failed to allocate raw expr", K(dest_nudf), K(ret));
+      } else if (OB_ISNULL(dest_nudf)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("expr is NULL", K(dest_nudf), K(ret));
+      } else {
+        dest = dest_nudf;
+      }
+    } else if (T_FUN_SYS_PYTHON_UDF == expr_type) {
+      ObPythonUdfRawExpr *dest_nudf = NULL;
       if (OB_FAIL(create_raw_expr(expr_type, dest_nudf))) {
         LOG_WARN("failed to allocate raw expr", K(dest_nudf), K(ret));
       } else if (OB_ISNULL(dest_nudf)) {

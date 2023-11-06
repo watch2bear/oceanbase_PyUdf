@@ -2218,8 +2218,8 @@ typedef enum ObItemType
   T_MAX, //Attention: add a new type before T_MAX
 
   //新增
-  T_CREATE_MODEL,
-  T_DROP_MODEL,  
+  T_CREATE_PYTHON_UDF,
+  T_DROP_PYTHON_UDF,  
   T_FUNCTION_ELEMENT_LIST,
   T_PARAM_DEFINITION,
 } ObItemType;

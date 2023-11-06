@@ -308,7 +308,7 @@ END_P SET_VAR DELIMITER
         PERCENT_RANK PHASE PLAN PHYSICAL PLANREGRESS PLUGIN PLUGIN_DIR PLUGINS POINT POLYGON PERFORMANCE
         PROTECTION PRIORITY PL POLICY POOL PORT POSITION PREPARE PRESERVE PRETTY PRETTY_COLOR PREV PRIMARY_ZONE PRIVILEGES PROCESS
         PROCESSLIST PROFILE PROFILES PROXY PRECEDING PCTFREE P_ENTITY P_CHUNK
-        PUBLIC PROGRESSIVE_MERGE_NUM PREVIEW PS PLUS 
+        PUBLIC PROGRESSIVE_MERGE_NUM PREVIEW PS PLUS PREDICT PYTHON_UDF
 
         QUARTER QUERY QUERY_RESPONSE_TIME QUEUE_TIME QUICK
 
@@ -497,7 +497,7 @@ END_P SET_VAR DELIMITER
 %type <node> switchover_tenant_stmt switchover_clause
 %type <node> recover_tenant_stmt recover_point_clause
 /*新增*/ 
-%type <node> create_model_stmt drop_model_stmt
+%type <node> create_python_udf_stmt drop_python_udf_stmt
 %type <node> function_element_list function_element param_name param_type
 %start sql_stmt
 %%
@@ -554,8 +554,8 @@ stmt:
     }
   }
   | create_function_stmt    { $$ = $1; check_question_mark($$, result); }
-  | create_model_stmt       { $$ = $1; check_question_mark($$, result); }
-  | drop_model_stmt         { $$ = $1; check_question_mark($$, result); }
+  | create_python_udf_stmt  { $$ = $1; check_question_mark($$, result); }
+  | drop_python_udf_stmt    { $$ = $1; check_question_mark($$, result); }
   | drop_function_stmt      { $$ = $1; check_question_mark($$, result); }
   | create_table_like_stmt  { $$ = $1; check_question_mark($$, result); }
   | create_database_stmt    { $$ = $1; check_question_mark($$, result); }
@@ -2703,6 +2703,21 @@ MOD '(' expr ',' expr ')'
     store_pl_ref_object_symbol($$, result, REF_FUNC);
   }
 }
+| PREDICT function_name '(' opt_expr_as_list ')'
+{
+  if (NULL != $4)
+  {
+    ParseNode *params = NULL;
+    merge_nodes(params, result, T_EXPR_LIST, $4);
+    malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_PYTHON_UDF, 2, $2, params);
+    store_pl_ref_object_symbol($$, result, REF_FUNC);
+  }
+  else
+  {
+    malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_PYTHON_UDF, 1, $2);
+    store_pl_ref_object_symbol($$, result, REF_FUNC);
+  }
+}
 | sys_interval_func
 {
   $$ = $1;
@@ -4397,23 +4412,23 @@ NUMERIC
 }
 ;
 
-create_model_stmt:
-CREATE MODEL NAME_OB '(' function_element_list ')' RETURNS ret_type '{' STRING_VALUE '}'
+create_python_udf_stmt:
+CREATE PYTHON_UDF NAME_OB '(' function_element_list ')' RETURNS ret_type '{' STRING_VALUE '}'
 {
   ParseNode *function_elements = NULL;
   merge_nodes(function_elements, result, T_FUNCTION_ELEMENT_LIST, $5);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_CREATE_MODEL, 4, 
-                           $3,                             /* model name */
+  malloc_non_terminal_node($$, result->malloc_pool_, T_CREATE_PYTHON_UDF, 4, 
+                           $3,                             /* udf name */
                            function_elements,              /* function parameter */
                            $8,                             /* return type */
-                           $10);                           /* python model code */
+                           $10);                           /* python code */
 }
 ;
 
-drop_model_stmt:
-DROP MODEL opt_if_exists NAME_OB
+drop_python_udf_stmt:
+DROP PYTHON_UDF opt_if_exists NAME_OB
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DROP_MODEL, 2, $3, $4);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_DROP_PYTHON_UDF, 2, $3, $4);
 }
 ;
 

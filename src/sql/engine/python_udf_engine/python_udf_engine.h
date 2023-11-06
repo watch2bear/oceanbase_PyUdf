@@ -25,7 +25,6 @@ namespace oceanbase
         //------------------------------------Udf------------------------------------
         class pythonUdf {
         public:
-        //private:
             char* pycall;//code
             std::string name;
             int arg_count;//参数数量
@@ -35,7 +34,7 @@ namespace oceanbase
             bool mul_rt;
             PyUdfSchema::PyUdfRetType* rt_type;
             //运行变量
-            PyObject *pArgs,*pResult;
+            PyObject *pArgs, *pResult;
             //初始化变量
             PyObject *pModule, *pFunc, *pInitial, *dic, *v;
             //向量化参数

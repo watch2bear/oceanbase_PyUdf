@@ -145,10 +145,10 @@ public:
   RPC_S(PRD drop_udf, obrpc::OB_DROP_USER_DEFINED_FUNCTION, (ObDropUserDefinedFunctionArg));
   //----End of definitions for managing udf----
 
-  //----Definitions for managing model----
-  RPC_S(PRD create_model, obrpc::OB_CREATE_MODEL, (ObCreateModelArg));
-  RPC_S(PRD drop_model, obrpc::OB_DROP_MODEL, (ObDropModelArg));
-  //----End of definitions for managing model----
+  //----Definitions for managing python udf----
+  RPC_S(PRD create_python_udf, obrpc::OB_CREATE_PYTHON_UDF, (ObCreatePythonUdfArg));
+  RPC_S(PRD drop_python_udf, obrpc::OB_DROP_PYTHON_UDF, (ObDropPythonUdfArg));
+  //----End of definitions for managing python udf----
 
 
   //----Definitions for managing sequence----

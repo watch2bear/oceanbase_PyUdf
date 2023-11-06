@@ -5439,12 +5439,12 @@ public:
   bool if_exist_;
 };
 
-struct ObCreateModelArg : public ObDDLArg
+struct ObCreatePythonUdfArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
 public:
-  ObCreateModelArg(): ObDDLArg(), python_udf_() {}
-  virtual ~ObCreateModelArg() {}
+  ObCreatePythonUdfArg(): ObDDLArg(), python_udf_() {}
+  virtual ~ObCreatePythonUdfArg() {}
 
   bool is_valid() const {
     return !python_udf_.get_name_str().empty();
@@ -5454,12 +5454,12 @@ public:
   share::schema::ObPythonUDF python_udf_;
 };
 
-struct ObDropModelArg : public ObDDLArg
+struct ObDropPythonUdfArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDropModelArg(): ObDDLArg(), tenant_id_(common::OB_INVALID_ID), name_() {}
-  virtual ~ObDropModelArg() {}
+  ObDropPythonUdfArg(): ObDDLArg(), tenant_id_(common::OB_INVALID_ID), name_(), if_exist_(false) {}
+  virtual ~ObDropPythonUdfArg() {}
 
   bool is_valid() const {
     return !name_.empty();

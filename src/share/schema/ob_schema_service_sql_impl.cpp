@@ -255,7 +255,7 @@ ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl()
       tablespace_service_(*this),
       profile_service_(*this),
       audit_service_(*this),
-      model_service_(*this),
+      python_udf_service_(*this),
       rw_lock_(common::ObLatchIds::SCHEMA_REFRESH_INFO_LOCK),
       last_operation_tenant_id_(OB_INVALID_TENANT_ID),
       sequence_id_(OB_INVALID_ID),
@@ -2340,6 +2340,29 @@ int ObSchemaServiceSQLImpl::fetch_all_tenant_info(
     ret;                                                                \
   })
 
+#define SQL_APPEND_PYTHON_UDF_ID(schema_keys, exec_tenant_id, schema_key_size, sql) \
+  ({                                                                    \
+    int ret = OB_SUCCESS;                                               \
+    UNUSED(exec_tenant_id);                                                  \
+    if (OB_FAIL(sql.append("("))) {                                     \
+      LOG_WARN("append sql failed", K(ret));                            \
+    } else {                                                            \
+      for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {   \
+        if (OB_FAIL(sql.append_fmt("%s('%.*s')", 0 == i ? "" : ", ",    \
+                                   schema_keys[i].python_udf_name_.length(),   \
+                                   schema_keys[i].python_udf_name_.ptr()))) {  \
+          LOG_WARN("append sql failed", K(ret));                        \
+        }                                                               \
+      }                                                                 \
+      if (OB_SUCC(ret)) {                                               \
+        if (OB_FAIL(sql.append(")"))) {                                 \
+          LOG_WARN("append sql failed", K(ret));                        \
+        }                                                               \
+      }                                                                 \
+    }                                                                   \
+    ret;                                                                \
+  })
+
 int ObSchemaServiceSQLImpl::fetch_all_database_info(
     const ObRefreshSchemaStatus &schema_status,
     const int64_t schema_version,
@@ -2629,7 +2652,7 @@ FETCH_NEW_SCHEMA_ID(SYS_PL_OBJECT, sys_pl_object);
 FETCH_NEW_SCHEMA_ID(RLS_POLICY, rls_policy);
 FETCH_NEW_SCHEMA_ID(RLS_GROUP, rls_group);
 FETCH_NEW_SCHEMA_ID(RLS_CONTEXT, rls_context);
-FETCH_NEW_SCHEMA_ID(MODEL, model);
+FETCH_NEW_SCHEMA_ID(PYTHON_UDF, python_udf);
 
 #undef FETCH_NEW_SCHEMA_ID
 
@@ -4989,6 +5012,54 @@ int ObSchemaServiceSQLImpl::fetch_udfs(
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_udf_schema(tenant_id, *result, schema_array))) {
         LOG_WARN("failed to retrieve udf", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSchemaServiceSQLImpl::fetch_python_udfs(
+    ObISQLClient &sql_client,
+    const ObRefreshSchemaStatus &schema_status,
+    const int64_t schema_version,
+    const uint64_t tenant_id,
+    ObIArray<ObSimplePythonUdfSchema> &schema_array,
+    const SchemaKey *schema_keys,
+    const int64_t schema_key_size)
+{
+  int ret = OB_SUCCESS;
+
+  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+    ObMySQLResult *result = NULL;
+    ObSqlString sql;
+    const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
+    const uint64_t exec_tenant_id = fill_exec_tenant_id(schema_status);
+    //普通表test_model
+    const char *const TABLE_NAME = "test_model";
+    if (OB_FAIL(sql.append_fmt(COMMON_SQL_WITH_TENANT, TABLE_NAME,
+                               fill_extract_tenant_id(schema_status, tenant_id)))) {
+      LOG_WARN("append sql failed", K(ret));
+    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+      LOG_WARN("append sql failed", K(ret));
+    } else if (NULL != schema_keys && schema_key_size > 0) {
+      if (OB_FAIL(sql.append_fmt(" AND (name) in"))) {
+        LOG_WARN("append failed", K(ret));
+      } else if (OB_FAIL(SQL_APPEND_PYTHON_UDF_ID(schema_keys, exec_tenant_id, schema_key_size, sql))) {
+        LOG_WARN("sql append model name failed", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
+      if (OB_FAIL(sql.append(" ORDER BY tenant_id desc, name desc,\
+                               schema_version desc"))) {
+        LOG_WARN("sql append failed", K(ret));
+      } else if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {
+        LOG_WARN("execute sql failed", K(ret), K(tenant_id), K(sql));
+      } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fail to get result. ", K(ret));
+      } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_python_udf_schema(tenant_id, *result, schema_array))) {
+        LOG_WARN("failed to retrieve model", K(ret));
       }
     }
   }
@@ -7383,6 +7454,108 @@ int ObSchemaServiceSQLImpl::fetch_all_udf_info(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_udf_schema(tenant_id, *result, udf_array))) {
+        LOG_WARN("Failed to retrieve udf infos", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+// int ObSchemaServiceSQLImpl::get_batch_models(
+//     const ObRefreshSchemaStatus &schema_status,
+//     const int64_t schema_version,
+//     common::ObArray<uint64_t> &tenant_udf_ids,
+//     common::ObISQLClient &sql_client,
+//     common::ObIArray<ObPythonUDF> &udf_info_array)
+// {
+//   int ret = OB_SUCCESS;
+//   const uint64_t tenant_id = schema_status.tenant_id_;
+//   udf_info_array.reserve(tenant_udf_ids.count());
+//   LOG_DEBUG("fetch batch models begin.");
+//   if (schema_version <= 0) {
+//     ret = OB_INVALID_ARGUMENT;
+//     LOG_WARN("invalid argument", K(schema_version), K(ret));
+//   } else if (!check_inner_stat()) {
+//     ret = OB_NOT_INIT;
+//     LOG_WARN("check inner stat fail");
+//   }
+
+//   std::sort(tenant_udf_ids.begin(), tenant_udf_ids.end());
+//   // split query to tenant space && split big query
+//   int64_t begin = 0;
+//   int64_t end = 0;
+//   while (OB_SUCCESS == ret && end < tenant_udf_ids.count()) {
+//     while (OB_SUCCESS == ret && end < tenant_udf_ids.count()
+//            && end - begin < MAX_IN_QUERY_PER_TIME) {
+//       end++;
+//     }
+//     if (OB_FAIL(fetch_all_model_info(schema_status, schema_version, tenant_id, sql_client, udf_info_array,
+//         &tenant_udf_ids.at(begin), end - begin))) {
+//       LOG_WARN("fetch all model info failed", K(schema_version), K(ret));
+//     }
+//     begin = end;
+//   }
+//   LOG_INFO("get batch model info finish", K(schema_version), K(ret));
+//   return ret;
+// }
+
+int ObSchemaServiceSQLImpl::fetch_all_python_udf_info(
+    const ObRefreshSchemaStatus &schema_status,
+    const int64_t schema_version,
+    const uint64_t tenant_id,
+    ObISQLClient &sql_client,
+    ObIArray<ObPythonUDF> &udf_array,
+    const uint64_t *udf_keys /* = NULL */,
+    const int64_t udf_size /* = 0 */)
+{
+  int ret = OB_SUCCESS;
+  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+    ObMySQLResult *result = NULL;
+    ObSqlString sql;
+    const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
+    const uint64_t exec_tenant_id = fill_exec_tenant_id(schema_status);
+    DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
+
+    //暂时用普通表尝试
+    const char *const TABLE_NAME = "test_model";
+
+    if (OB_FAIL(sql.append_fmt(COMMON_SQL_WITH_TENANT, TABLE_NAME,
+                               fill_extract_tenant_id(schema_status, tenant_id)))) {
+      LOG_WARN("append sql failed", K(ret));
+    } else if (NULL != udf_keys && udf_size > 0) {
+      if (OB_FAIL(sql.append_fmt(" AND model_id IN ("))) {
+        LOG_WARN("append sql failed", K(ret));
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < udf_size; ++i) {
+          const uint64_t udf_id = fill_extract_schema_id(schema_status, udf_keys[i]);
+          if (OB_FAIL(sql.append_fmt("%s%lu",
+                                     0 == i ? "" : ", ",
+                                     udf_id))) {
+            LOG_WARN("append sql failed", K(ret), K(i));
+          }
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(sql.append(")"))) {
+            LOG_WARN("append sql failed", K(ret));
+          }
+        }
+      }
+    } else { }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+        LOG_WARN("append failed", K(ret));
+      } else if (OB_FAIL(sql.append(" ORDER BY TENANT_ID DESC, NAME DESC, SCHEMA_VERSION DESC"))) {
+        LOG_WARN("sql append failed", K(ret));
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {
+        LOG_WARN("execute sql failed", K(ret), K(tenant_id), K(sql));
+      } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Fail to get result", K(ret));
+      } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_python_udf_schema(tenant_id, *result, udf_array))) {
         LOG_WARN("Failed to retrieve udf infos", K(ret));
       }
     }

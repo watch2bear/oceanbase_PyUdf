@@ -989,6 +989,12 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node, ObRawExpr
         }
         break;
       }
+      case T_FUN_SYS_PYTHON_UDF: {
+        if (OB_FAIL(process_python_udf_node(node, expr))) {
+          LOG_WARN("fail to process python udf node", K(ret), K(node));
+        }
+        break;
+      }
       case T_WINDOW_FUNCTION: {
         const int64_t orig_win_func_cnt = ctx_.win_exprs_->count();
         if (OB_FAIL(process_window_function_node(node, expr))) {
@@ -7089,6 +7095,102 @@ int ObRawExprResolverImpl::transform_ratio_afun_to_arg_div_sum(const ParseNode *
 
       div_node->children_[0] = func_node->children_[1];
       div_node->children_[1] = divisor_node;
+    }
+  }
+  return ret;
+}
+
+int ObRawExprResolverImpl::check_udf_info(const ParseNode *node, const share::schema::ObPythonUDF &udf_info) 
+{
+  int ret = OB_SUCCESS;
+  //resolve expr_list_node
+  ParseNode* expr_list_node = node->children_[1];
+  if (OB_ISNULL(expr_list_node) && udf_info.get_arg_num() > 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("param node is null", K(ret));
+  } else if (T_EXPR_LIST != expr_list_node->type_) {
+    ret = OB_ERR_PARSER_SYNTAX;
+    LOG_WARN("invalid paramters node", K(ret), K(node->children_[1]));
+  } else {
+    int expr_arg_num = expr_list_node->num_child_;
+    int arg_num = udf_info.get_arg_num();
+    if (expr_arg_num > arg_num || expr_arg_num < arg_num) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(expr_list_node));
+    } 
+  }
+  return ret;
+}
+
+int ObRawExprResolverImpl::process_python_udf_node(const ParseNode *node, ObRawExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+  share::schema::ObPythonUDF udf_info;
+  bool exist = false;
+  ObString udf_name;
+  ObCollationType cs_type;
+  if (OB_ISNULL(ctx_.session_info_) || OB_ISNULL(ctx_.schema_checker_)) {
+    //PL resolver don't have schema checker and session info
+    ret = OB_ERR_FUNCTION_UNKNOWN;
+  } else if (OB_ISNULL(node)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(node));
+  } else if (OB_UNLIKELY(1 > node->num_child_) || OB_ISNULL(node->children_) || 
+    OB_ISNULL(node->children_[0]) || OB_UNLIKELY(T_EXPR_LIST != node->children_[1]->type_)) {
+    ret = OB_ERR_PARSER_SYNTAX;
+    LOG_WARN("invalid node children for python udf node", K(ret), K(node->num_child_), "node", SJ(ObParserResultPrintWrapper(*node)));
+  } else if (OB_FAIL(ctx_.session_info_->get_collation_connection(cs_type))) {
+    LOG_WARN("failed to get collation", K(ret));
+  } else {
+    ObPythonUdfRawExpr *func_expr = NULL;
+    ObString name(node->children_[0]->str_len_, node->children_[0]->str_value_);
+    if (OB_FAIL(ob_write_string(ctx_.expr_factory_.get_allocator(), name, udf_name))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Malloc function name failed", K(ret));
+    } else if (FALSE_IT(IGNORE_RETURN ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, udf_name))) {
+    } else if (OB_FAIL(ctx_.schema_checker_->get_python_udf_info(ctx_.session_info_->get_effective_tenant_id(),
+                                                                 udf_name,
+                                                                 udf_info,
+                                                                 exist))) {
+      LOG_WARN("failed to resolve udf", K(ret));
+    } else if (!exist) {
+      ret = OB_ERR_FUNCTION_UNKNOWN;
+      LOG_WARN("cannot find python udf", K(ret));
+    } 
+    else if (OB_FAIL(check_udf_info(node, udf_info))) {
+      LOG_WARN("fail to pass udf info check", K(ret));
+    } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS_PYTHON_UDF, func_expr))) { //process 
+      LOG_WARN("fail to create raw expr", K(ret));
+    } else if (OB_ISNULL(func_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null ptr", K(ret));
+    } else if (OB_FAIL(func_expr->set_udf_meta(udf_info))) {
+      LOG_WARN("set python udf info failed", K(ret));
+    } else if (udf_info.get_arg_num() > 0){
+      //resolve params
+      ObRawExpr *param_expr = NULL;
+      int32_t num_child = node->children_[1]->num_child_;
+      for (int32_t i = 0; OB_SUCC(ret) && i < num_child; ++i) {
+        const ParseNode *param_node = node->children_[1]->children_[i];
+        if (OB_ISNULL(param_node)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("param node is null", K(ret));
+        } else if (OB_FAIL(SMART_CALL(recursive_resolve(param_node, param_expr)))) {
+          LOG_WARN("fail to recursive resolve udf parameters", K(ret), K(param_node));
+        } else if (OB_FAIL(func_expr->add_param_expr(param_expr))) {
+          LOG_WARN("fail to add param expr", K(ret), K(param_expr));
+        }
+      }
+    } else {
+      func_expr->set_func_name(udf_name);
+    }
+    if (OB_SUCC(ret)) {
+      ObSysFunRawExpr *tmp_expr = func_expr;
+      if (OB_FAIL(ObRawExprUtils::function_alias(ctx_.expr_factory_, tmp_expr))) {
+        LOG_WARN("failed to do funcion alias", K(ret), K(func_expr));
+      } else {
+        expr = tmp_expr;
+      }
     }
   }
   return ret;

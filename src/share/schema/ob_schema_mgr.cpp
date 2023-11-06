@@ -484,6 +484,7 @@ ObSchemaMgr::ObSchemaMgr()
       package_mgr_(allocator_),
       trigger_mgr_(allocator_),
       udf_mgr_(allocator_),
+      python_udf_mgr_(allocator_),
       udt_mgr_(allocator_),
       sequence_mgr_(allocator_),
       label_se_policy_mgr_(allocator_),
@@ -536,6 +537,7 @@ ObSchemaMgr::ObSchemaMgr(ObIAllocator &allocator)
       package_mgr_(allocator_),
       trigger_mgr_(allocator_),
       udf_mgr_(allocator_),
+      python_udf_mgr_(allocator_),
       udt_mgr_(allocator_),
       sequence_mgr_(allocator_),
       label_se_policy_mgr_(allocator_),
@@ -596,6 +598,8 @@ int ObSchemaMgr::init(const uint64_t tenant_id)
     LOG_WARN("init trigger mgr failed", K(ret));
   } else if (OB_FAIL(udf_mgr_.init())) {
     LOG_WARN("init udf mgr failed", K(ret));
+  } else if (OB_FAIL(python_udf_mgr_.init())) {
+    LOG_WARN("init python udf mgr failed", K(ret));
   } else if (OB_FAIL(udt_mgr_.init())) {
     LOG_WARN("init udt mgr failed", K(ret));
   } else if (OB_FAIL(sequence_mgr_.init())) {
@@ -678,6 +682,7 @@ void ObSchemaMgr::reset()
     routine_mgr_.reset();
     trigger_mgr_.reset();
     udf_mgr_.reset();
+    python_udf_mgr_.reset();
     udt_mgr_.reset();
     sequence_mgr_.reset();
     profile_mgr_.reset();
@@ -771,6 +776,8 @@ int ObSchemaMgr::assign(const ObSchemaMgr &other)
         LOG_WARN("assign trigger mgr failed", K(ret));
       } else if (OB_FAIL(udf_mgr_.assign(other.udf_mgr_))) {
         LOG_WARN("assign udf mgr failed", K(ret));
+      } else if (OB_FAIL(python_udf_mgr_.assign(other.python_udf_mgr_))) {
+        LOG_WARN("assign python udf mgr failed", K(ret));
       } else if (OB_FAIL(udt_mgr_.assign(other.udt_mgr_))) {
         LOG_WARN("assign udt mgr failed", K(ret));
       } else if (OB_FAIL(sequence_mgr_.assign(other.sequence_mgr_))) {
@@ -862,6 +869,8 @@ int ObSchemaMgr::deep_copy(const ObSchemaMgr &other)
         LOG_WARN("deep copy trigger mgr failed", K(ret));
       } else if (OB_FAIL(udf_mgr_.deep_copy(other.udf_mgr_))) {
         LOG_WARN("deep copy udf mgr failed", K(ret));
+      } else if (OB_FAIL(python_udf_mgr_.deep_copy(other.python_udf_mgr_))) {
+        LOG_WARN("deep copy python udf mgr failed", K(ret));
       } else if (OB_FAIL(udt_mgr_.deep_copy(other.udt_mgr_))) {
         LOG_WARN("deep copy udt mgr failed", K(ret));
       } else if (OB_FAIL(sequence_mgr_.deep_copy(other.sequence_mgr_))) {
@@ -1370,6 +1379,20 @@ int ObSchemaMgr::get_udf_schema(
     LOG_WARN("tenant_id not matched", K(ret), K(tenant_id), K_(tenant_id));
   } else {
     ret = udf_mgr_.get_udf_schema(udf_id, udf_schema);
+  }
+  return ret;
+}
+int ObSchemaMgr::get_python_udf_schema(
+    const uint64_t tenant_id,
+    const uint64_t udf_id,
+    const ObSimplePythonUdfSchema *&python_udf_schema) const
+{
+  int ret = OB_SUCCESS;
+  if (tenant_id_ != tenant_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant_id not matched", K(ret), K(tenant_id), K_(tenant_id));
+  } else {
+    ret = python_udf_mgr_.get_python_udf_schema(udf_id, python_udf_schema);
   }
   return ret;
 }
@@ -4095,6 +4118,8 @@ int ObSchemaMgr::del_schemas_in_tenant(const uint64_t tenant_id)
         LOG_WARN("del trigger in tenant failed", K(ret), K(tenant_id));
       } else if (OB_FAIL(udf_mgr_.del_schemas_in_tenant(tenant_id))) {
         LOG_WARN("del udf in tenant failed", K(ret), K(tenant_id));
+      } else if (OB_FAIL(python_udf_mgr_.del_schemas_in_tenant(tenant_id))) {
+        LOG_WARN("del python udf in tenant failed", K(ret), K(tenant_id));
       } else if (OB_FAIL(udt_mgr_.del_udt_schemas_in_tenant(tenant_id))) {
         LOG_WARN("del udt in tenant failed", K(ret), K(tenant_id));
       } else if (OB_FAIL(sequence_mgr_.del_schemas_in_tenant(tenant_id))) {
@@ -4154,6 +4179,7 @@ int ObSchemaMgr::get_schema_count(int64_t &schema_count) const
     int64_t package_schema_count = 0;
     int64_t trigger_schema_count = 0;
     int64_t udf_schema_count = 0;
+    int64_t python_udf_schema_count = 0;
     int64_t udt_schema_count = 0;
     int64_t sequence_schema_count = 0;
     int64_t sys_variable_schema_count = 0;
@@ -4186,6 +4212,8 @@ int ObSchemaMgr::get_schema_count(int64_t &schema_count) const
       LOG_WARN("get_trigger_mgr_count failed", K(ret));
     } else if (OB_FAIL(udf_mgr_.get_udf_schema_count(udf_schema_count))) {
       LOG_WARN("get_udf_mgr_count failed", K(ret));
+    } else if (OB_FAIL(python_udf_mgr_.get_python_udf_schema_count(python_udf_schema_count))) {
+      LOG_WARN("get_python_udf_mgr_count failed", K(ret));
     } else if (OB_FAIL(udt_mgr_.get_udt_schema_count(udt_schema_count))) {
       LOG_WARN("get_udt_mgr_count failed", K(ret));
     } else if (OB_FAIL(sequence_mgr_.get_sequence_schema_count(sequence_schema_count))) {
@@ -4928,6 +4956,10 @@ int ObSchemaMgr::get_schema_statistics(common::ObIArray<ObSchemaStatisticsInfo> 
     LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(udf_mgr_.get_schema_statistics(schema_info))) {
     LOG_WARN("fail to get udf statistics", K(ret));
+  } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
+  } else if (OB_FAIL(python_udf_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("fail to get python udf statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
     LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(udt_mgr_.get_schema_statistics(schema_info))) {

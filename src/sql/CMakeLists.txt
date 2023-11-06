@@ -204,7 +204,7 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_tenant_executor.cpp
   engine/cmd/ob_trigger_executor.cpp
   engine/cmd/ob_udf_executor.cpp
-  engine/cmd/ob_model_executor.cpp
+  engine/cmd/ob_python_udf_executor.cpp
   engine/cmd/ob_user_cmd_executor.cpp
   engine/cmd/ob_variable_set_executor.cpp
   engine/cmd/ob_xa_executor.cpp
@@ -1049,8 +1049,8 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_use_database_resolver.cpp
   resolver/ddl/ob_create_context_resolver.cpp
   resolver/ddl/ob_drop_context_resolver.cpp
-  resolver/ddl/ob_create_model_resolver.cpp
-  resolver/ddl/ob_drop_model_resolver.cpp
+  resolver/ddl/ob_create_python_udf_resolver.cpp
+  resolver/ddl/ob_drop_python_udf_resolver.cpp
 )
 
 ob_set_subtarget(ob_sql resolver_dml

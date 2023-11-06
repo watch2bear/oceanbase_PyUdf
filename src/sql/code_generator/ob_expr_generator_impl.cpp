@@ -27,6 +27,7 @@
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_expr_dll_udf.h"
+#include "sql/engine/expr/ob_expr_python_udf.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/expr/ob_expr_udf.h"
 #include "sql/engine/expr/ob_expr_pl_integer_checker.h"
@@ -618,6 +619,11 @@ int ObExprGeneratorImpl::visit_simple_op(ObNonTerminalRawExpr &expr)
           ret = visit_normal_udf_expr(expr, normal_udf_op);
           break;
         }
+        case T_FUN_SYS_PYTHON_UDF: {
+          ObExprPythonUdf *python_udf_op = static_cast<ObExprPythonUdf*>(op);
+          ret = visit_python_udf_expr(expr, python_udf_op);
+          break;
+        }
         case T_FUN_PL_GET_CURSOR_ATTR: {
           ObExprPLGetCursorAttr *get_cursor_attr = static_cast<ObExprPLGetCursorAttr *>(op);
           ret = visit_pl_get_cursor_attr_expr(expr, get_cursor_attr);
@@ -1080,6 +1086,28 @@ int ObExprGeneratorImpl::visit_normal_udf_expr(ObNonTerminalRawExpr &expr, ObExp
   } else if (OB_FAIL(normal_udf_op->set_udf_meta(fun_sys.get_udf_meta()))) {
     LOG_WARN("failed to set udf to expr", K(ret));
   } else if (OB_FAIL(normal_udf_op->init_udf(fun_sys.get_param_exprs()))) {
+    LOG_WARN("failed to init udf", K(ret));
+  } else {
+    LOG_DEBUG("set udf meta to expr", K(fun_sys.get_udf_meta()));
+  }
+  return ret;
+}
+
+int ObExprGeneratorImpl::visit_python_udf_expr(ObNonTerminalRawExpr &expr, ObExprPythonUdf *python_udf_op)
+{
+  int ret = OB_SUCCESS;
+  ObPythonUdfRawExpr &fun_sys = static_cast<ObPythonUdfRawExpr &>(expr);
+  //used to check the old python udf op exist or not
+  ObExprOperator *old_op = NULL;
+  if (OB_ISNULL(python_udf_op)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("python udf op is null", K(ret));
+  } else if (OB_ISNULL(old_op = expr.get_op())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid old op", K(expr), K(ret));
+  } else if (OB_FAIL(python_udf_op->set_udf_meta(fun_sys.get_udf_meta()))) { //copy udf metadata
+    LOG_WARN("failed to set udf to expr", K(ret));
+  } else if (OB_FAIL(python_udf_op->init_udf(fun_sys.get_param_exprs()))) { //init python variables
     LOG_WARN("failed to init udf", K(ret));
   } else {
     LOG_DEBUG("set udf meta to expr", K(fun_sys.get_udf_meta()));

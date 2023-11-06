@@ -146,7 +146,7 @@ int ObMaxIdFetcher::convert_id_type(
     case OB_MAX_USED_RLS_POLICY_ID_TYPE:
     case OB_MAX_USED_RLS_GROUP_ID_TYPE:
     case OB_MAX_USED_RLS_CONTEXT_ID_TYPE:
-    case OB_MAX_USED_MODEL_ID_TYPE: {
+    case OB_MAX_USED_PYTHON_UDF_ID_TYPE: {
       dst = OB_MAX_USED_OBJECT_ID_TYPE;
       break;
     }

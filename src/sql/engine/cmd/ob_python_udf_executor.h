@@ -10,8 +10,8 @@
  * See the Mulan PubL v2 for more details.
  */
 
-#ifndef OB_MODEL_EXECUTOR_H_
-#define OB_MODEL_EXECUTOR_H_
+#ifndef OB_PYTHON_UDF_EXECUTOR_H_
+#define OB_PYTHON_UDF_EXECUTOR_H_
 
 #include "common/object/ob_object.h"
 #include "lib/container/ob_se_array.h"
@@ -30,27 +30,27 @@ namespace sql
 {
 class ObExecContext;
 class ObRawExpr;
-class ObCreateModelStmt;
-class ObCreateModelExecutor
+class ObCreatePythonUdfStmt;
+class ObCreatePythonUdfExecutor
 {
 public:
   const static int OB_DEFAULT_ARRAY_SIZE = 16;
-  ObCreateModelExecutor(){}
-  virtual ~ObCreateModelExecutor(){}
-  int execute(ObExecContext &ctx, ObCreateModelStmt &stmt);
+  ObCreatePythonUdfExecutor(){}
+  virtual ~ObCreatePythonUdfExecutor(){}
+  int execute(ObExecContext &ctx, ObCreatePythonUdfStmt &stmt);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObCreateModelExecutor);
+  DISALLOW_COPY_AND_ASSIGN(ObCreatePythonUdfExecutor);
 };
 
-class ObDropModelStmt;
-class ObDropModelExecutor
+class ObDropPythonUdfStmt;
+class ObDropPythonUdfExecutor
 {
 public:
-  ObDropModelExecutor(){}
-  virtual ~ObDropModelExecutor(){}
-  int execute(ObExecContext &ctx, ObDropModelStmt &stmt);
+  ObDropPythonUdfExecutor(){}
+  virtual ~ObDropPythonUdfExecutor(){}
+  int execute(ObExecContext &ctx, ObDropPythonUdfStmt &stmt);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObDropModelExecutor);
+  DISALLOW_COPY_AND_ASSIGN(ObDropPythonUdfExecutor);
 };
 }
 }

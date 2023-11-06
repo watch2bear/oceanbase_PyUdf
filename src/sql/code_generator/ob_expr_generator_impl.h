@@ -38,6 +38,7 @@ class ObExprUDF;
 class ObExprNullif;
 class ObBaseExprColumnConv;
 class ObExprDllUdf;
+class ObExprPythonUdf;
 class ObExprPLIntegerChecker;
 class ObExprPLGetCursorAttr;
 class ObExprPLSQLCodeSQLErrm;
@@ -122,6 +123,7 @@ private:
   inline int visit_nullif_expr(ObNonTerminalRawExpr &expr, ObExprNullif *&nullif_expr);
   inline int visit_fun_interval(ObNonTerminalRawExpr &expr, ObExprInterval *fun_interval);
   inline int visit_normal_udf_expr(ObNonTerminalRawExpr &expr, ObExprDllUdf *normal_udf_op);
+  inline int visit_python_udf_expr(ObNonTerminalRawExpr &expr, ObExprPythonUdf *python_udf_op);
   inline int visit_pl_integer_checker_expr(ObOpRawExpr &expr, ObExprPLIntegerChecker *checker);
   inline int visit_pl_assoc_index_expr(ObOpRawExpr &expr, ObExprPLAssocIndex *pl_assoc_index);
   inline int visit_pl_sqlcode_sqlerrm_expr(ObRawExpr &expr, ObExprPLSQLCodeSQLErrm *pl_sqlcode_sqlerrm);

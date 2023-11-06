@@ -12,6 +12,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_python_udf.h"
+#include <sstream>
 
 namespace oceanbase
 {
@@ -25,15 +26,15 @@ namespace schema
 {
 
 ObPythonUDF::ObPythonUDF(common::ObIAllocator *allocator)
-    : ObSchema(allocator), tenant_id_(common::OB_INVALID_ID), model_id_(common::OB_INVALID_ID), name_(), arg_num_(0), arg_names_(), arg_types_(),
-      ret_(PyUdfType::UDF_UNINITIAL), pycall_(), schema_version_(common::OB_INVALID_VERSION)
+    : ObSchema(allocator), tenant_id_(common::OB_INVALID_ID), udf_id_(common::OB_INVALID_ID), name_(), arg_num_(0), arg_names_(), arg_types_(),
+      ret_(PyUdfRetType::UDF_UNINITIAL), pycall_(), schema_version_(common::OB_INVALID_VERSION)
 {
   reset();
 }
 
 ObPythonUDF::ObPythonUDF(const ObPythonUDF &src_schema)
-    : ObSchema(), tenant_id_(common::OB_INVALID_ID), model_id_(common::OB_INVALID_ID), name_(), arg_num_(0), arg_names_(), arg_types_(),
-      ret_(PyUdfType::UDF_UNINITIAL), pycall_(), schema_version_(common::OB_INVALID_VERSION)
+    : ObSchema(), tenant_id_(common::OB_INVALID_ID), udf_id_(common::OB_INVALID_ID), name_(), arg_num_(0), arg_names_(), arg_types_(),
+      ret_(PyUdfRetType::UDF_UNINITIAL), pycall_(), schema_version_(common::OB_INVALID_VERSION)
 {
   reset();
   *this = src_schema;
@@ -43,54 +44,101 @@ ObPythonUDF::~ObPythonUDF()
 {
 }
 
-void ObPythonUDF::set_arg_names(const char* arg_name) {
-    char* arg_names_str = const_cast<char*>(get_arg_names());
-    arg_names_.reset();
-    std::string result = arg_names_str ? arg_names_str : "";
-    if (!result.empty()) {
-        //不同的参数名之间用逗号分隔
-        result += ",";
+int ObPythonUDF::get_arg_types_arr(common::ObSEArray<ObPythonUDF::PyUdfRetType, 16> &udf_attributes_types) const {
+  int ret = OB_SUCCESS;
+  udf_attributes_types.reuse();
+  char* arg_types_str = const_cast<char*>(get_arg_types());
+  std::istringstream ss(arg_types_str);
+  std::string token;
+  while (std::getline(ss, token, ',')) {
+    if (token == "STRING") {
+      udf_attributes_types.push_back(ObPythonUDF::PyUdfRetType::STRING);
+    } else if (token == "INTEGER") {
+      udf_attributes_types.push_back(ObPythonUDF::PyUdfRetType::INTEGER);
+    } else if (token == "REAL") {
+      udf_attributes_types.push_back(ObPythonUDF::PyUdfRetType::REAL);
+    } else if (token == "DECIMAL") {
+      udf_attributes_types.push_back(ObPythonUDF::PyUdfRetType::DECIMAL);
     }
-    //添加新的arg_name
-    result += arg_name;
-    //将结果转回ObString
-    deep_copy_str(common::ObString(result.length(), result.c_str()),arg_names_);
+  }
+  if(udf_attributes_types.count() != arg_num_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to resolve arg types string", K(ret));
+  }
+  return ret;
 }
 
-void ObPythonUDF::set_arg_types(const std::string type_string) {
-    char* arg_types_str = const_cast<char*>(get_arg_types());
-    arg_types_.reset();
-    std::string result = arg_types_str ? arg_types_str : "";
-    if (!result.empty()){
-        //不同的参数类型之间用逗号分隔
-        result += ",";
+// int ObPythonUDF::check_pycall(std::string &err_message) {
+//   int ret = OB_SUCCESS;
+//   const char* python_code = get_pycall();
+//   Py_Initialize();
+//   if (PyRun_SimpleString(python_code) != 0) {
+//     ret = OB_ERR_UNEXPECTED;
+//     err_message = "python code exeception";
+//     LOG_WARN("python code raise an exception", K(ret));
+//   }
+//   if (strstr(python_code, "py_initial") == nullptr) {
+//     err_message = "pycall lack py_initial";
+//   } else if (strstr(python_code, "py_func") == nullptr) {
+//     err_message = "pycall lack py_func";
+//   }
+//   Py_FinalizeEx();
+//   return ret;
+// }
+
+ObPythonUDF& ObPythonUDF::operator= (const ObPythonUDF &other) {
+  if (this != &other) {
+    reset();
+    int ret = OB_SUCCESS;
+    error_ret_ = other.error_ret_;
+    tenant_id_ = other.tenant_id_;
+    udf_id_ = other.udf_id_;
+    arg_num_ = other.arg_num_;
+    schema_version_ = other.schema_version_;
+    ret_ = other.ret_;
+    if (OB_FAIL(deep_copy_str(other.name_, name_))) {
+      LOG_WARN("Fail to deep copy name", K(ret));
+    } else if (OB_FAIL(deep_copy_str(other.arg_names_, arg_names_))) {
+      LOG_WARN("Fail to deep copy arg names", K(ret));
+    } else if (OB_FAIL(deep_copy_str(other.arg_types_, arg_types_))) {
+      LOG_WARN("Fail to deep copy arg types", K(ret));
+    } else if (OB_FAIL(deep_copy_str(other.pycall_, pycall_))) {
+      LOG_WARN("Fail to deep copy pycall", K(ret));
     }
-    //添加新的arg_type
-    result += type_string;
-    deep_copy_str(common::ObString(result.length(), result.c_str()),arg_types_);
+    if (OB_FAIL(ret)) {
+      error_ret_ = ret;
+    }
+  }
+  return *this;
 }
 
 void ObPythonUDF::reset()
 {
   tenant_id_ = OB_INVALID_ID;
   name_.reset();
-  arg_num_ = 0;
   arg_names_.reset();
   arg_types_.reset();
-  ret_ = PyUdfType::UDF_UNINITIAL;
+  ret_ = PyUdfRetType::UDF_UNINITIAL;
   pycall_.reset();
   ObSchema::reset();
 }
 
 OB_SERIALIZE_MEMBER(ObPythonUDF,
-					tenant_id_,
-                    model_id_,
+				            tenant_id_,
+                    udf_id_,
                     name_,
                     arg_num_,
                     arg_names_,
                     arg_types_,
-					ret_,
+				            ret_,
                     pycall_);
+
+OB_SERIALIZE_MEMBER(ObPythonUDFMeta,
+                    name_,
+                    ret_,
+                    pycall_,
+                    udf_attributes_types_,
+                    init_);
 
 }// end schema
 }// end share

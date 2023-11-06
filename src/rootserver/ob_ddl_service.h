@@ -826,9 +826,10 @@ public:
   //----End of functions for managing udf----
 
   //----Functions for managing udf----
-  virtual int create_model(share::schema::ObPythonUDF &PythonUdf_info,
+  virtual int create_python_udf(share::schema::ObPythonUDF &PythonUdf_info,
                            const common::ObString &ddl_stmt_str);
-  virtual int drop_model(const obrpc::ObDropModelArg &drop_model_arg);
+  virtual int drop_python_udf(const obrpc::ObDropPythonUdfArg &drop_python_udf_arg);
+  virtual int check_python_udf_exist(uint64 tenant_id, const common::ObString &name, bool &is_exsit, uint64_t &udf_id);
   //----End of Functions for managing udf----                        
   
   //----Functions for managing routine----

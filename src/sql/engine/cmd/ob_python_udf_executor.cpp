@@ -11,11 +11,11 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "sql/engine/cmd/ob_model_executor.h"
+#include "sql/engine/cmd/ob_python_udf_executor.h"
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "share/ob_common_rpc_proxy.h"
-#include "sql/resolver/ddl/ob_create_model_stmt.h"
-#include "sql/resolver/ddl/ob_drop_model_stmt.h"
+#include "sql/resolver/ddl/ob_create_python_udf_stmt.h"
+#include "sql/resolver/ddl/ob_drop_python_udf_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -28,18 +28,17 @@ using namespace share::schema;
 namespace sql
 {
 
-int ObCreateModelExecutor::execute(ObExecContext &ctx, ObCreateModelStmt &stmt)
+int ObCreatePythonUdfExecutor::execute(ObExecContext &ctx, ObCreatePythonUdfStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
-  obrpc::ObCreateModelArg &create_model_arg = stmt.get_create_model_arg();
-  //share::schema::ObPythonUDF &pythonUDF = create_model_arg.python_udf_;
+  obrpc::ObCreatePythonUdfArg &create_python_udf_arg = stmt.get_create_python_udf_arg();
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
-    const_cast<obrpc::ObCreateModelArg&>(create_model_arg).ddl_stmt_str_ = first_stmt;
+    const_cast<obrpc::ObCreatePythonUdfArg&>(create_python_udf_arg).ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -50,24 +49,24 @@ int ObCreateModelExecutor::execute(ObExecContext &ctx, ObCreateModelStmt &stmt)
   } else if (OB_ISNULL(common_rpc_proxy)){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("common rpc proxy should not be null", K(ret));
-  } else if (OB_FAIL(common_rpc_proxy->create_model(create_model_arg))) {
+  } else if (OB_FAIL(common_rpc_proxy->create_python_udf(create_python_udf_arg))) {
     LOG_WARN("rpc proxy create udf failed", K(ret),
                 "dst", common_rpc_proxy->get_server());
   }
   return ret;
 }
 
-int ObDropModelExecutor::execute(ObExecContext &ctx, ObDropModelStmt &stmt)
+int ObDropPythonUdfExecutor::execute(ObExecContext &ctx, ObDropPythonUdfStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
-  const obrpc::ObDropModelArg &drop_model_arg = stmt.get_drop_model_arg();
+  const obrpc::ObDropPythonUdfArg &drop_python_udf_arg = stmt.get_drop_python_udf_arg();
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
-    const_cast<obrpc::ObDropModelArg&>(drop_model_arg).ddl_stmt_str_ = first_stmt;
+    const_cast<obrpc::ObDropPythonUdfArg&>(drop_python_udf_arg).ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -78,8 +77,8 @@ int ObDropModelExecutor::execute(ObExecContext &ctx, ObDropModelStmt &stmt)
   } else if (OB_ISNULL(common_rpc_proxy)){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("common rpc proxy should not be null", K(ret));
-  } else if (OB_FAIL(common_rpc_proxy->drop_model(drop_model_arg))) {
-    LOG_WARN("rpc proxy drop model failed", K(ret),
+  } else if (OB_FAIL(common_rpc_proxy->drop_python_udf(drop_python_udf_arg))) {
+    LOG_WARN("rpc proxy drop python udf failed", K(ret),
                 "dst", common_rpc_proxy->get_server());
   }
   return ret;

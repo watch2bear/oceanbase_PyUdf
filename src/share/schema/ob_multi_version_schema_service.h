@@ -282,6 +282,17 @@ public:
       const common::ObString &name,
       bool &exist,
       uint64_t &udf_id);
+  int check_python_udf_exist(const uint64_t tenant_id,
+                             const common::ObString &name,
+                             bool &exist,
+                             uint64_t &model_id);
+  int get_python_udf_info(const uint64_t tenant_id,
+                          const common::ObString &udf_name,
+                          share::schema::ObPythonUDF &udf_info,
+                          bool &exist);
+  int fill_python_udf_schema(const uint64_t tenant_id,
+                             common::sqlclient::ObMySQLResult &result,
+                             ObPythonUDF &udf_info);                        
   int check_sequence_exist(const uint64_t tenant_id,
       const uint64_t database_id,
       const common::ObString &name,

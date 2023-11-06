@@ -10,8 +10,8 @@
  * See the Mulan PubL v2 for more details.
  */
 
-#ifndef OB_MODEL_SQL_SERVICE_H_
-#define OB_MODEL_SQL_SERVICE_H_
+#ifndef OB_PYTHON_UDF_SQL_SERVICE_H_
+#define OB_PYTHON_UDF_SQL_SERVICE_H_
 
 #include "ob_ddl_sql_service.h"
 
@@ -28,12 +28,12 @@ namespace schema
 {
 class ObPythonUDF;
 
-class ObModelSqlService : public ObDDLSqlService
+class ObPythonUdfSqlService : public ObDDLSqlService
 {
 public:
-  ObModelSqlService(ObSchemaService &schema_service)
+  ObPythonUdfSqlService(ObSchemaService &schema_service)
     : ObDDLSqlService(schema_service) {}
-  virtual ~ObModelSqlService() {}
+  virtual ~ObPythonUdfSqlService() {}
 
   virtual int insert_python_udf(const ObPythonUDF &PythonUdf_info,
                                 common::ObISQLClient *sql_client,
@@ -43,7 +43,7 @@ public:
                                 const int64_t new_schema_version,
                                 common::ObISQLClient *sql_client,
                                 const common::ObString *ddl_stmt_str = NULL);
-  virtual int drop_python_udf(const ObUDF &udf_info,
+  virtual int drop_python_udf(const ObPythonUDF &udf_info,
                               const int64_t new_schema_version,
                               common::ObISQLClient *sql_client,
                               const common::ObString *ddl_stmt_str = NULL);
@@ -52,7 +52,7 @@ private:
   int add_python_udf(common::ObISQLClient &sql_client, 
                      const ObPythonUDF &PythonUdf_info);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObModelSqlService);
+  DISALLOW_COPY_AND_ASSIGN(ObPythonUdfSqlService);
 };
 
 

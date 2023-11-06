@@ -8232,9 +8232,9 @@ int ObBroadcastConsensusVersionArg::assign(const ObBroadcastConsensusVersionArg 
 
 OB_SERIALIZE_MEMBER(ObBroadcastConsensusVersionRes, ret_);
 
-OB_SERIALIZE_MEMBER((ObCreateModelArg, ObDDLArg),
+OB_SERIALIZE_MEMBER((ObCreatePythonUdfArg, ObDDLArg),
                      python_udf_);
-OB_SERIALIZE_MEMBER((ObDropModelArg, ObDDLArg),
+OB_SERIALIZE_MEMBER((ObDropPythonUdfArg, ObDDLArg),
                      tenant_id_,
                      name_,
                      if_exist_);

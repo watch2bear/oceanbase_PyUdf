@@ -130,8 +130,8 @@
 #include "pl/ob_pl_package.h"
 #include "sql/resolver/ddl/ob_create_context_resolver.h"
 #include "sql/resolver/ddl/ob_drop_context_resolver.h"
-#include "sql/resolver/ddl/ob_create_model_resolver.h"
-#include "sql/resolver/ddl/ob_drop_model_resolver.h"
+#include "sql/resolver/ddl/ob_create_python_udf_resolver.h"
+#include "sql/resolver/ddl/ob_drop_python_udf_resolver.h"
 
 namespace oceanbase
 {
@@ -1065,12 +1065,12 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(CheckpointSlog);
         break;
       }
-      case T_CREATE_MODEL: {
-        REGISTER_STMT_RESOLVER(CreateModel);
+      case T_CREATE_PYTHON_UDF: {
+        REGISTER_STMT_RESOLVER(CreatePythonUdf);
         break;
       }
-      case T_DROP_MODEL: {
-        REGISTER_STMT_RESOLVER(DropModel);
+      case T_DROP_PYTHON_UDF: {
+        REGISTER_STMT_RESOLVER(DropPythonUdf);
         break;
       }
       default: {

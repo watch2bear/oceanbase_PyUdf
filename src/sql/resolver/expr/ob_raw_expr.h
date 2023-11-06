@@ -33,6 +33,7 @@
 #include "sql/resolver/expr/ob_expr_info_flag.h"
 #include "share/system_variable/ob_system_variable.h"
 #include "share/schema/ob_udf.h"
+#include "share/schema/ob_python_udf.h"
 #include "lib/worker.h"
 #include "sql/parser/parse_node.h"
 #include "sql/resolver/ob_resolver_define.h"
@@ -3448,6 +3449,24 @@ private:
   //for udf function info
   share::schema::ObUDFMeta udf_meta_;
   common::ObSEArray<common::ObString, 16> udf_attributes_;// name of input expr
+};
+
+class ObPythonUdfRawExpr : public ObSysFunRawExpr
+{
+public:
+  ObPythonUdfRawExpr(common::ObIAllocator &alloc) : ObSysFunRawExpr(alloc), udf_meta_() {}
+  ObPythonUdfRawExpr() : ObSysFunRawExpr(), udf_meta_() {}
+  virtual ~ObPythonUdfRawExpr() {}
+  int assign(const ObRawExpr &other) override;
+  int inner_deep_copy(ObIRawExprCopier &copier) override;
+  int set_udf_meta(share::schema::ObPythonUDF &udf);
+  const share::schema::ObPythonUDFMeta &get_udf_meta() const { return udf_meta_; }
+  virtual bool inner_same_as(const ObRawExpr &expr,
+                             ObExprEqualCheckContext *check_context = NULL) const override;
+
+private:
+  //for python udf function info
+  share::schema::ObPythonUDFMeta udf_meta_;
 };
 
 class ObCollectionConstructRawExpr : public ObSysFunRawExpr

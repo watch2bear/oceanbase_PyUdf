@@ -417,7 +417,8 @@ ob_set_subtarget(ob_share schema
   schema/ob_server_schema_service.cpp
   schema/ob_table_schema.cpp
   schema/ob_python_udf.cpp
-  schema/ob_model_sql_service.cpp
+  schema/ob_python_udf_mgr.cpp
+  schema/ob_python_udf_sql_service.cpp
 )
 
 ob_set_subtarget(ob_share stat
@@ -463,6 +464,8 @@ ob_set_subtarget(ob_share unit
 )
 
 ob_add_new_object_target(ob_share ob_share)
+
+target_link_libraries(ob_share PUBLIC python_lib)
 
 target_compile_options(ob_share PRIVATE -Wshorten-64-to-32)
 target_link_libraries(ob_share PUBLIC ob_base)

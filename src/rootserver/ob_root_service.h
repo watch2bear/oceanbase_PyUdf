@@ -557,10 +557,10 @@ public:
   int drop_user_defined_function(const obrpc::ObDropUserDefinedFunctionArg &arg);
   //----End of functions for managing UDF----
 
-  //----Functions for managing Model
-  int create_model(const obrpc::ObCreateModelArg &arg);
-  int drop_model(const obrpc::ObDropModelArg &arg);
-  //----End of functions for managing Model
+  //----Functions for managing Python UDF----
+  int create_python_udf(const obrpc::ObCreatePythonUdfArg &arg);
+  int drop_python_udf(const obrpc::ObDropPythonUdfArg &arg);
+  //----End of functions for managing Python UDF----
 
   //----Functions for managing routines----
   int create_routine(const obrpc::ObCreateRoutineArg &arg);
