@@ -5470,7 +5470,7 @@ def_table_schema(
       ('arg_num', 'int'),
       ('arg_names', 'varchar:OB_MAX_SYS_PARAM_INFO_LENGTH', 'false'),
       ('arg_types', 'varchar:OB_MAX_SYS_PARAM_INFO_LENGTH', 'false'),
-      ('pycall', 'varchar:OB_MAX_PART_FUNC_EXPR_LENGTH', 'false'),
+      ('pycall', 'text:OB_MAX_TEXT_LENGTH', 'false'),
       ('schema_version', 'int'),
     ],
 )

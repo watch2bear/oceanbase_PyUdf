@@ -26,8 +26,6 @@
 #include "storage/ob_storage_util.h"
 
 #include "sql/engine/expr/ob_expr_python_udf.h"
-#include "sql/engine/python_udf_engine/python_udf_util.h"
-#include "sql/engine/python_udf_engine/python_udf_pycall.h"
 
 namespace oceanbase {
 using namespace common;
@@ -336,7 +334,7 @@ int ObExprPythonUdf::eval_test_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       }
       case ObDoubleType: {
         //put double into numpy array
-        numpyarray = PyArray_EMPTY(1, elements, NPY_FLOAT32, 0);
+        numpyarray = PyArray_EMPTY(1, elements, NPY_FLOAT64, 0);
         PyArray_SETITEM((PyArrayObject *)numpyarray, (char *)PyArray_GETPTR1((PyArrayObject *)numpyarray, 0), PyFloat_FromDouble(argDatum->get_double()));
         break;
       }
@@ -543,7 +541,7 @@ int ObExprPythonUdf::eval_test_udf_batch(const ObExpr &expr, ObEvalCtx &ctx,
     //转换得到numpy array --> 单一元素
     int j = 0, zero = 0;
     int *index;
-    if (expr.args_[i]->is_const_expr()) 
+    if (!expr.args_[i]->is_const_expr()) 
       index = &j;
     else 
       index = &zero;
@@ -574,7 +572,7 @@ int ObExprPythonUdf::eval_test_udf_batch(const ObExpr &expr, ObEvalCtx &ctx,
       case ObInt32Type:
       case ObIntType: {
         numpyarray = PyArray_EMPTY(1, elements, NPY_INT32, 0);
-        for (int j = 0; j < batch_size; j++) {
+        for (j = 0; j < batch_size; j++) {
           if (my_skip.at(j) || eval_flags.at(j))
             continue;
           else
@@ -584,8 +582,8 @@ int ObExprPythonUdf::eval_test_udf_batch(const ObExpr &expr, ObEvalCtx &ctx,
         break;
       }
       case ObDoubleType: {
-        numpyarray = PyArray_EMPTY(1, elements, NPY_FLOAT32, 0);
-        for (int j = 0; j < batch_size; j++) {
+        numpyarray = PyArray_EMPTY(1, elements, NPY_FLOAT64, 0);
+        for (j = 0; j < batch_size; j++) {
           if (my_skip.at(j) || eval_flags.at(j))
             continue;
           else
