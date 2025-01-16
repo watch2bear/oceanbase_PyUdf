@@ -90,6 +90,19 @@ int ObPythonUDFOp::inner_close()
     ret = ObOperator::inner_close();
   }
   //ret = ObOperator::inner_close();
+  /*PyObject *dycacher; // dycacher module
+  PyObject *clearFunc; // reset function
+  if((dycacher = PyImport_ImportModule("dycacher")) == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get dycacher module", K(ret));
+  } else if ((clearFunc = PyObject_GetAttrString(dycacher, "reset_cache")) == nullptr ||
+              !PyCallable_Check(clearFunc)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get reset cacher function", K(ret));
+  } else if (PyObject_CallObject(clearFunc, NULL) == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to call reset cacher function", K(ret));
+  } else {}*/
   return ret;
 }
 
@@ -149,13 +162,13 @@ int ObPythonUDFOp::inner_get_next_batch(const int64_t max_row_cnt)
     gstate = PyGILState_Ensure();
     nStatus = true;
   }
-  struct timeval t1, t2;
-  gettimeofday(&t1, NULL);
+  //struct timeval t1, t2;
+  //gettimeofday(&t1, NULL);
   
   if (with_batch_control_) {
     if (OB_SUCC(ret) && !controller_.can_output()) {
       clear_evaluated_flag();
-      controller_.resize(controller_.get_desirable() * 2);
+      controller_.resize(controller_.get_desirable() * BUFFER_MAG);
       const ObBatchRows *child_brs = nullptr;
       while (OB_SUCC(ret) && !brs_.end_ && !controller_.is_full()) { // while loop直至缓存填满
         if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
@@ -177,7 +190,7 @@ int ObPythonUDFOp::inner_get_next_batch(const int64_t max_row_cnt)
   } else { // 无batch size控制
     if (OB_SUCC(ret)) { 
       clear_evaluated_flag();
-      controller_.resize(controller_.get_desirable());
+      controller_.resize(controller_.get_desirable() * BUFFER_MAG);
       const ObBatchRows *child_brs = nullptr;
       if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
         ret = OB_ERR_UNEXPECTED;
@@ -205,13 +218,14 @@ int ObPythonUDFOp::inner_get_next_batch(const int64_t max_row_cnt)
       (*e)->get_eval_info(eval_ctx_).clear_evaluated_flag();
     }
   }
-  gettimeofday(&t2, NULL);
+  /*gettimeofday(&t2, NULL);
   double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec);
   double time_s = timeuse / 1000;
-  // std::fstream time_log;
-  // time_log.open("/home/test/experiments/oceanbase/opt/op_time.log", std::ios::app);
-  // time_log << time_s << " ";
-  // time_log.close(); 
+  std::fstream time_log;
+  // operater time log
+  time_log.open("/home/test/experiments/oceanbase/revision/limit1/op_time.log", std::ios::app);
+  time_log << "operator time: " << time_s << std::endl;
+  time_log.close(); */
 
   //PyGC_Enable();
   //PyGC_Collect();
@@ -517,19 +531,25 @@ int ObColInputStore::save_vector(ObEvalCtx &eval_ctx, ObBatchRows &brs)
           /* do nothing */
         } else {
           // deep copy from vector to datums
-          ObLength copy_len;
+          ObLength copy_len = 0;
           const char *payload;
           vector->get_payload(j, payload, copy_len);
           char *buf = nullptr;
-          buf = static_cast<char *>(tmp_alloc_.alloc(copy_len));
-          if (buf == nullptr) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("allocate memory failed", K(copy_len), K(ret));
-          } else {
-            MEMCPY(buf, payload, copy_len);
-            dst[dst_idx].ptr_ = buf;
-            dst[dst_idx].len_ = copy_len;
+          if (copy_len == 0) {
+            dst[dst_idx].ptr_ = nullptr;
+            dst[dst_idx].len_ = 0;
             ++dst_idx;
+          } else {
+            buf = static_cast<char *>(tmp_alloc_.alloc(copy_len));
+            if (buf == nullptr) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("allocate memory failed", K(copy_len), K(ret));
+            } else {
+              MEMCPY(buf, payload, copy_len);
+              dst[dst_idx].ptr_ = buf;
+              dst[dst_idx].len_ = copy_len;
+              ++dst_idx;
+            }
           }
         }
       }
@@ -572,7 +592,10 @@ int ObColInputStore::load_vector(ObEvalCtx &eval_ctx, int64_t load_size)
   } else {
     for (int64_t i = 0; i < exprs_.count(); ++i) {
       ObExpr *expr = exprs_.at(i);
-      expr->init_vector_for_write(eval_ctx, expr->get_default_res_format(), load_size);
+      //if (expr->datum_meta_.type_ == ObVarcharType || expr->datum_meta_.type_ == ObCharType)
+        //expr->init_vector(eval_ctx, VEC_DISCRETE, load_size, false);
+      //else
+      expr->init_vector(eval_ctx, expr->get_default_res_format(), load_size, true);
       ObDatum *src = datums_copy_.at(i);
       ObIVector *dst = expr->get_vector(eval_ctx);
       for (int j = 0; j < load_size; ++j) {
@@ -601,8 +624,7 @@ int ObPUInputStore::init(common::ObIAllocator *alloc, ObExpr *expr, int64_t leng
   } else {
     buf_alloc_ = alloc;
     expr_ = expr;
-    length_ = length;
-    if (OB_FAIL(alloc_data_ptrs()) || data_ptrs_ == nullptr) {
+    if (OB_FAIL(alloc_data_ptrs(length)) || data_ptrs_ == nullptr) {
       ret = OB_INIT_FAIL;
       LOG_WARN("Init ObPUInputStore failed.", K(ret), K(alloc), K(expr->arg_cnt_));
     } else {
@@ -613,13 +635,13 @@ int ObPUInputStore::init(common::ObIAllocator *alloc, ObExpr *expr, int64_t leng
   return ret;
 }
 
-int ObPUInputStore::alloc_data_ptrs()
+int ObPUInputStore::alloc_data_ptrs(int64_t length)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_) ) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Repeat allocation.", K(ret));
-  } else if (buf_alloc_ == nullptr || expr_ == nullptr || expr_->arg_cnt_ <= 0 || length_ <= 0) {
+  } else if (buf_alloc_ == nullptr || expr_ == nullptr || expr_->arg_cnt_ <= 0 || length <= 0) {
     ret = OB_NOT_INIT;
     LOG_WARN("Uninit allocator and expression.", K(ret));
   } else {
@@ -640,7 +662,7 @@ int ObPUInputStore::alloc_data_ptrs()
         case ObTextType:
         case ObMediumTextType:
         case ObLongTextType: {
-          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length_ * sizeof(ObDatum))); // string lists
+          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length * sizeof(ObDatum))); // string lists
           break;
         }
         case ObTinyIntType:
@@ -648,11 +670,11 @@ int ObPUInputStore::alloc_data_ptrs()
         case ObMediumIntType:
         case ObInt32Type:
         case ObIntType: {
-          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length_ * sizeof(int))); // int lists
+          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length * sizeof(int))); // int lists
           break;
         }
         case ObDoubleType: {
-          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length_ * sizeof(double))); // double lists
+          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length * sizeof(double))); // double lists
           break;
         }
         default: {
@@ -662,9 +684,12 @@ int ObPUInputStore::alloc_data_ptrs()
       }
       if (data_ptrs_[i] == nullptr) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Allocate data_ptr_[i] memory failed.", K(ret), K(buf_alloc_), K(length_), K(i), K(e->datum_meta_.type_));
+        LOG_WARN("Allocate data_ptr_[i] memory failed.", K(ret), K(buf_alloc_), K(length), K(i), K(e->datum_meta_.type_));
       }
     }
+  }
+  if (OB_SUCC(ret)) {
+    length_ = length;
   }
   return ret;
 }
@@ -684,7 +709,7 @@ int ObPUInputStore::reset(int64_t length /* default = 0 */)
     ret = reuse();
   } else if (OB_FAIL(free())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(alloc_data_ptrs())) {
+  } else if (OB_FAIL(alloc_data_ptrs(length))) {
     ret = OB_INIT_FAIL;
   } else {
     saved_size_ = 0;
@@ -882,7 +907,7 @@ int ObPythonUDFCell::do_process_all()
   struct timeval t1, t2;
   //load numpy api
   _import_array();
-  gettimeofday(&t1, NULL);
+  //gettimeofday(&t1, NULL);
   if (OB_FAIL(wrap_input_numpy(pArgs, eval_size)) || pArgs == nullptr) { // wrap all input
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Wrap Cell Input Store as Python UDF input args failed.", K(ret));
@@ -892,22 +917,16 @@ int ObPythonUDFCell::do_process_all()
   } else { /* do nothing */ }
   Py_CLEAR(pArgs);
 
-  if (OB_SUCC(ret)) {
-    input_store_.reuse();
-  }
-  gettimeofday(&t2, NULL);
-  double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
+  //gettimeofday(&t2, NULL);
+  /*double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
   double tps = eval_size * 1000000 / timeuse; // current tuples per sec
   double time_s = timeuse / 1000;
-  // std::fstream time_log;
-  // time_log.open("/home/test/experiments/oceanbase/opt/pf_time.log", std::ios::app);
-  // time_log << time_s << " ";
-  // time_log.close(); 
-  // std::fstream tps_log;
-  // tps_log.open("/home/test/experiments/oceanbase/opt/both_pps.log", std::ios::app);
-  // tps_log << "batch size: " << eval_size << std::endl;
-  // tps_log << "prediction processing speed: " << tps << std::endl;
-  // tps_log.close();
+  std::fstream tps_log;
+  tps_log.open("/home/test/experiments/oceanbase/revision/pps/unopt_pf_time_pps.log", std::ios::app);
+  tps_log << "process time: " << time_s << std::endl;
+  tps_log << "batch size: " << eval_size << std::endl;
+  tps_log << "prediction processing speed: " << tps << std::endl;
+  tps_log.close();*/
   return ret;
 }
 
@@ -918,13 +937,11 @@ int ObPythonUDFCell::do_process()
   result_store_ = nullptr;
   result_size_ = 0;
   struct timeval t1, t2;
-  struct timeval t3, t4;
   int64_t eval_size = 0;
   //load numpy api
   _import_array();
   ObPythonUdfInfo *info = static_cast<ObPythonUdfInfo *>(expr_->extra_info_);
   // bool batch_size_const = info->udf_meta_.batch_size_const_;
-  gettimeofday(&t3, NULL);
   bool batch_size_const = false;
   for (int idx = 0; OB_SUCC(ret) && idx < input_store_.get_saved_size(); idx += eval_size) {
     gettimeofday(&t1, NULL);
@@ -941,21 +958,21 @@ int ObPythonUDFCell::do_process()
       if (!batch_size_const)
         modify_desirable(t1, t2, eval_size);
 
-      double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
+      /*double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
       double time_s = timeuse / 1000;
+      double tps = eval_size * 1000000 / timeuse; // current tuples per sec
+      std::fstream tps_log;
+      tps_log.open("/home/test/experiments/oceanbase/revision/pps/opt_pf_time_pps.log", std::ios::app);
+      tps_log << "process time: " << time_s << std::endl;
+      tps_log << "batch size: " << eval_size << std::endl;
+      tps_log << "prediction processing speed: " << tps << std::endl;
+      tps_log.close();*/
       // std::fstream time_log;
       // time_log.open("/home/test/experiments/oceanbase/opt/pf_time.log", std::ios::app);
       // time_log << time_s << " ";
       // time_log.close(); 
       Py_CLEAR(pArgs);
     }
-    gettimeofday(&t4, NULL);
-    double timeuse2 = (t4.tv_sec - t3.tv_sec) * 1000000 + (double)(t4.tv_usec - t3.tv_usec); // usec
-    double time_s2 = timeuse2 / 1000;
-    // std::fstream time_log2;
-    // time_log2.open("/home/test/experiments/oceanbase/opt/process_time.log", std::ios::app);
-    // time_log2 << time_s2 << " ";
-    // time_log2.close(); 
   }
   return ret;
 }
@@ -1249,6 +1266,11 @@ int ObPythonUDFCell::modify_desirable(timeval &start, timeval &end, int64_t eval
       info->round++;
     info->tps_s = tps;
     info->predict_size += info->delta;
+    /*// 采集batch size变化日志
+    std::fstream batch_size_control_log;
+    batch_size_control_log.open("/home/test/experiments/oceanbase/revision/batch_control_overhead/batch_size_control.log", std::ios::app);
+    batch_size_control_log << "eval size:" << eval_size << ", current desirable predict size:" << info->predict_size << std::endl;
+    batch_size_control_log.close();*/
   } else { //tps <= info->tps_s
     // 未达到阈值
     info->tps_s = (1 - info->alpha) * info->tps_s + info->alpha * tps; // 平滑系数α
@@ -1359,6 +1381,9 @@ int ObPUStoreController::process()
   if (is_empty()) {
     /* do nothing */
   } else {
+    //struct timeval t3, t4;
+    //gettimeofday(&t3, NULL);
+    
     ObPythonUDFCell* header = cells_list_.get_header();
     for (ObPythonUDFCell* cell = cells_list_.get_first(); 
         cell != header && OB_SUCC(ret); 
@@ -1384,6 +1409,16 @@ int ObPUStoreController::process()
       stored_input_cnt_ = 0;
       output_idx_ = 0;
     }
+
+    /*
+    // pf time log
+    gettimeofday(&t4, NULL);
+    double timeuse2 = (t4.tv_sec - t3.tv_sec) * 1000000 + (double)(t4.tv_usec - t3.tv_usec); // usec
+    double time_s2 = timeuse2 / 1000;
+    std::fstream time_log2;
+    time_log2.open("/home/test/experiments/oceanbase/revision/batch_control_overhead/process_time.log", std::ios::app);
+    time_log2 << "process time: " << time_s2 << std::endl;
+    time_log2.close(); */
   }
   return ret;
 }

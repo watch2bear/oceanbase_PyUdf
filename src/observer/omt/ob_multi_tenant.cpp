@@ -580,7 +580,7 @@ int ObMultiTenant::init(ObAddr myaddr,
     SpinWLockGuard guard(lock_);
     if (!Py_IsInitialized()) {
       Py_InitializeEx(0);
-      // PyImport_ImportModule("dycacher");
+      PyImport_ImportModule("dycacher");
       PyImport_ImportModule("numpy");
       PyImport_ImportModule("torch");
       //PyImport_ImportModule("tensorflow");
