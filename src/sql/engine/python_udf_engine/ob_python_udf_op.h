@@ -64,7 +64,7 @@ public:
   ObPUInputStore() : buf_alloc_(NULL), tmp_alloc_(), expr_(NULL), length_(0), data_ptrs_(NULL), saved_size_(0), inited_(false) {}
   ~ObPUInputStore() { free(); }
   int init(common::ObIAllocator *alloc, ObExpr *expr, int64_t length);
-  int alloc_data_ptrs();
+  int alloc_data_ptrs(int64_t length);
   int reuse();
   int reset(int64_t length = 0);
   int free();

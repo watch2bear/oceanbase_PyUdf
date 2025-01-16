@@ -673,8 +673,7 @@ int ObPUInputStore::init(common::ObIAllocator *alloc, ObExpr *expr, int64_t leng
   } else {
     buf_alloc_ = alloc;
     expr_ = expr;
-    length_ = length;
-    if (OB_FAIL(alloc_data_ptrs()) || data_ptrs_ == nullptr) {
+    if (OB_FAIL(alloc_data_ptrs(length)) || data_ptrs_ == nullptr) {
       ret = OB_INIT_FAIL;
       LOG_WARN("Init ObPUInputStore failed.", K(ret), K(alloc), K(expr->arg_cnt_));
     } else {
@@ -685,13 +684,13 @@ int ObPUInputStore::init(common::ObIAllocator *alloc, ObExpr *expr, int64_t leng
   return ret;
 }
 
-int ObPUInputStore::alloc_data_ptrs()
+int ObPUInputStore::alloc_data_ptrs(int64_t length)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_) ) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Repeat allocation.", K(ret));
-  } else if (buf_alloc_ == nullptr || expr_ == nullptr || expr_->arg_cnt_ <= 0 || length_ <= 0) {
+  } else if (buf_alloc_ == nullptr || expr_ == nullptr || expr_->arg_cnt_ <= 0 || length <= 0) {
     ret = OB_NOT_INIT;
     LOG_WARN("Uninit allocator and expression.", K(ret));
   } else {
@@ -712,7 +711,7 @@ int ObPUInputStore::alloc_data_ptrs()
         case ObTextType:
         case ObMediumTextType:
         case ObLongTextType: {
-          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length_ * sizeof(ObDatum))); // string lists
+          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length * sizeof(ObDatum))); // string lists
           break;
         }
         case ObTinyIntType:
@@ -720,11 +719,11 @@ int ObPUInputStore::alloc_data_ptrs()
         case ObMediumIntType:
         case ObInt32Type:
         case ObIntType: {
-          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length_ * sizeof(int))); // int lists
+          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length * sizeof(int))); // int lists
           break;
         }
         case ObDoubleType: {
-          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length_ * sizeof(double))); // double lists
+          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length * sizeof(double))); // double lists
           break;
         }
         default: {
@@ -737,6 +736,9 @@ int ObPUInputStore::alloc_data_ptrs()
         LOG_WARN("Allocate data_ptr_[i] memory failed.", K(ret), K(buf_alloc_), K(length_), K(i), K(e->datum_meta_.type_));
       }
     }
+  }
+  if (OB_SUCC(ret)) {
+    length_ = length;
   }
   return ret;
 }
@@ -756,15 +758,11 @@ int ObPUInputStore::reset(int64_t length /* default = 0 */)
     ret = reuse();
   } else if (OB_FAIL(free())) {
     ret = OB_ERR_UNEXPECTED;
-  } else{
-    length_=length;
-
-    if (OB_FAIL(alloc_data_ptrs())) {
-      ret = OB_INIT_FAIL;
-    } else {
-      saved_size_ = 0;
-      inited_ = true;
-    }
+  } else if (OB_FAIL(alloc_data_ptrs(length))) {
+    ret = OB_INIT_FAIL;
+  } else {
+    saved_size_ = 0;
+    inited_ = true;
   }
   return ret;
 }
@@ -975,10 +973,6 @@ int ObPythonUDFCell::do_process_all()
     LOG_WARN("Eval Python UDF failed.", K(ret));
   } else { /* do nothing */ }
   Py_CLEAR(pArgs);
-
-  if (OB_SUCC(ret)) {
-    input_store_.reuse();
-  }
   gettimeofday(&t2, NULL);
   double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
   double tps = eval_size * 1000000 / timeuse; // current tuples per sec
@@ -1910,7 +1904,8 @@ int ObPythonUDFCell::eval_python_udf(PyObject *pArgs, int64_t eval_size)
       || !PyCallable_Check(pFunc))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Get function handler failed.", K(ret));
-  } else if ((resultArray = PyObject_CallObject(pFunc, pArgs)) == nullptr) {
+  // } else if ((resultArray = PyObject_CallObject(pFunc, pArgs)) == nullptr) {
+  } else if ((resultArray = PyObject_CallFunction(pFunc, "N", pArgs)) == nullptr) {
     ObExprPythonUdf::process_python_exception();
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Execute Python UDF error.", K(ret));
