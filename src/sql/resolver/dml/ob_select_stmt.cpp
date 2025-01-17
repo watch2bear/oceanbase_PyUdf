@@ -711,6 +711,7 @@ int ObSelectStmt::do_to_string(char *buf, const int64_t buf_len, int64_t &pos) c
            N_CONNECT_BY, connect_by_exprs_,
            //"cte exprs", cte_exprs_,
            N_WHERE, condition_exprs_,
+           N_PYTHON_UDF_FILTER, python_udf_filter_exprs_,
            N_GROUP_BY, group_exprs_,
            N_ROLLUP, rollup_exprs_,
            N_HAVING, having_exprs_,

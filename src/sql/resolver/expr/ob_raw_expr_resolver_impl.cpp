@@ -7675,7 +7675,7 @@ int ObRawExprResolverImpl::process_python_udf_node(const ParseNode *node, ObRawE
   ObString udf_name;
   ObCollationType cs_type;
   ObPythonUdfRawExpr *func_expr = NULL;
-  if (!is_python_udf_expr_valid_scope(ctx_.current_scope_)
+  if (!is_python_udf_expr_valid_scope(ctx_.current_scope_) // 只对合法作用域下的python udf进行处理
       || ctx_.parents_expr_info_.has_member(IS_AGG)
       || ctx_.parents_expr_info_.has_member(IS_WINDOW_FUNC)
       || ctx_.parents_expr_info_.has_member(IS_PYTHON_UDF)) {
@@ -7721,7 +7721,9 @@ int ObRawExprResolverImpl::process_python_udf_node(const ParseNode *node, ObRawE
       LOG_WARN("null ptr", K(ret));
     } else if (OB_FAIL(func_expr->set_udf_meta(udf_info, batch_size))) {     //传递udf_meta
       LOG_WARN("set python udf info failed", K(ret));
-    } else if (udf_info.get_arg_num() > 0) {
+    } else if (udf_info.get_arg_num() != node->children_[child_num - 1]->num_child_) {
+      LOG_WARN("invalid udf arg nums", K(ret));
+    } else {
       //resolve params
       ObRawExpr *param_expr = NULL;
       int32_t num_child = node->children_[child_num - 1]->num_child_;
@@ -7735,7 +7737,7 @@ int ObRawExprResolverImpl::process_python_udf_node(const ParseNode *node, ObRawE
         } else if (OB_FAIL(SMART_CALL(recursive_resolve(param_node, param_expr)))) {
           LOG_WARN("fail to recursive resolve udf parameters", K(ret), K(param_node));
         } else if (OB_FAIL(ctx_.parents_expr_info_.del_member(IS_PYTHON_UDF))) {
-          LOG_WARN("failed to add member to parent exprs info.", K(ret));
+          LOG_WARN("failed to del member to parent exprs info.", K(ret));
         } else if (OB_FAIL(func_expr->add_param_expr(param_expr))) {
           LOG_WARN("fail to add param expr", K(ret), K(param_expr));
         }
@@ -7751,9 +7753,17 @@ int ObRawExprResolverImpl::process_python_udf_node(const ParseNode *node, ObRawE
       }
     }
   }
-  if (OB_SUCC(ret)) {
-    ret = ctx_.python_udf_exprs_->push_back(func_expr);
+  if (OB_FAIL(ret) || OB_FAIL(ctx_.python_udf_exprs_->push_back(func_expr))) {
+    LOG_WARN("failed to push back python udf exprs in select clause", K(ret), K(func_expr));
   }
+  /*
+  if (OB_SUCC(ret)) {
+    if (ctx_.current_scope_ == T_FIELD_LIST_SCOPE && OB_FAIL(ctx_.python_udf_exprs_->push_back(func_expr))) {
+      LOG_WARN("failed to push back python udf exprs in select clause", K(ret), K(func_expr));
+    } else if (ctx_.current_scope_ == T_WHERE_SCOPE && OB_FAIL(ctx_.python_udf_exprs_->push_back(func_expr))) { // wait to-do
+      LOG_WARN("failed to push back python udf exprs in where clause", K(ret), K(func_expr));
+    } else {}
+  }*/
   return ret;
 }
 

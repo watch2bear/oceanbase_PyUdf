@@ -19,6 +19,7 @@ namespace sql
 {
 
 const int DEFAULT_PU_LENGTH = 8192;
+const int BUFFER_MAG = 2;
 
 // buffer for columns that are not evaluated by python udf
 struct ObColInputStore
@@ -64,7 +65,7 @@ public:
   ObPUInputStore() : buf_alloc_(NULL), tmp_alloc_(), expr_(NULL), length_(0), data_ptrs_(NULL), saved_size_(0), inited_(false) {}
   ~ObPUInputStore() { free(); }
   int init(common::ObIAllocator *alloc, ObExpr *expr, int64_t length);
-  int alloc_data_ptrs();
+  int alloc_data_ptrs(int64_t length);
   int reuse();
   int reset(int64_t length = 0);
   int free();
@@ -170,7 +171,7 @@ public:
     }
     return desirable_;
   }; 
-  bool is_full() { return stored_input_cnt_ > desirable_; }
+  bool is_full() { return stored_input_cnt_ > desirable_ * (BUFFER_MAG - 1); }
   bool is_empty() { return stored_input_cnt_ == 0; }
   bool can_output() { return output_idx_ < stored_output_cnt_; }
   bool end_output() { return output_idx_ == stored_output_cnt_; }
@@ -213,7 +214,8 @@ public:
 
   ~ObPythonUDFOp();
 
-  static int find_predict_size(ObExpr *expr, int32_t &predict_size);
+  static int init_udfs(const common::ObIArray<ObExpr *> &udf_exprs);
+  static int import_udf(const share::schema::ObPythonUDFMeta &udf_meta);
 
   virtual int inner_open() override;
   virtual int inner_close() override;
@@ -223,12 +225,14 @@ public:
   virtual void destroy() override;
 
 private:
-  //int find_predict_size(ObExpr *expr, int32_t &predict_size);
+  int find_predict_size(ObExpr *expr, int32_t &predict_size);
   int clear_calc_exprs_evaluated_flags();
 
 private:
   int predict_size_; //每次python udf计算的元组数
   ObPUStoreController controller_;
+
+  void* _save; //for Python Interpreter Thread State
 };
 
 } // end namespace sql

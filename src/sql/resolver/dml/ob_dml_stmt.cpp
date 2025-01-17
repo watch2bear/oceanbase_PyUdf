@@ -4879,3 +4879,48 @@ int ObJsonTableDef::assign(const ObJsonTableDef& src)
 
   return ret;
 }
+
+ObRawExpr *ObDMLStmt::get_same_python_udf_filter_item(const ObRawExpr *expr)
+{
+  ObRawExpr *python_udf_filter_expr = NULL;
+  for (int64_t i = 0; i < python_udf_filter_exprs_.count(); ++i) {
+    if (python_udf_filter_exprs_.at(i) != NULL && expr != NULL &&
+        expr->same_as(*python_udf_filter_exprs_.at(i))) {
+      python_udf_filter_expr = python_udf_filter_exprs_.at(i);
+      break;
+    }
+  }
+  return python_udf_filter_expr;
+}
+
+int ObDMLStmt::add_python_udf_filter_expr(ObRawExpr *expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
+  } else if (OB_FAIL(python_udf_filter_exprs_.push_back(expr))) {
+    LOG_WARN("failed to add python udf expr", K(ret));
+  } else { /* do nothing */}
+  return ret;
+}
+
+int ObDMLStmt::remove_python_udf_filter_expr(ObRawExpr *expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < python_udf_filter_exprs_.count(); i++) {
+      if (OB_ISNULL(python_udf_filter_exprs_.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
+      } else if (expr == python_udf_filter_exprs_.at(i)) {
+        ret = python_udf_filter_exprs_.remove(i);
+        break;
+      } else {}
+    }
+  }
+  return ret;
+}

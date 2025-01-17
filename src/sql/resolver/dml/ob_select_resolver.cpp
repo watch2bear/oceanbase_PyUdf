@@ -1081,6 +1081,9 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   /* resolve where clause */
   OZ( resolve_where_clause(parse_tree.children_[PARSE_SELECT_WHERE]) );
 
+  /* add python udf filter into select item */
+  //OZ( mock_python_udf_filter_exprs() );
+
   if (OB_SUCC(ret) && !is_oracle_mode()) {
     /* resolve named window clause */
     OZ( resolve_named_windows_clause(parse_tree.children_[PARSE_SELECT_NAMED_WINDOWS]) );
@@ -6924,6 +6927,25 @@ int ObSelectResolver::check_listagg_aggr_param_valid(ObAggFunRawExpr *aggr_expr)
                                                        check_separator_exprs,
                                                        OB_ERR_ARGUMENT_SHOULD_CONSTANT_OR_GROUP_EXPR))) {
       LOG_WARN("fail to check by expr", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObSelectResolver::mock_python_udf_filter_exprs() {
+  int ret = OB_SUCCESS;
+  ObSelectStmt *select_stmt = get_select_stmt();
+  ObRawExpr *expr = NULL;
+  for (int i = 0; OB_SUCC(ret) && i < select_stmt->get_python_udf_filter_count(); ++i) {
+    expr = select_stmt->get_python_udf_filter_expr(i);
+    if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret));
+    } else {
+      SelectItem sel_item;
+      sel_item.expr_name_ = ObString("mock_projection_pyudf");
+      sel_item.expr_ = expr;
+      select_stmt->add_select_item(sel_item);
     }
   }
   return ret;

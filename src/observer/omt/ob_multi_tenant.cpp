@@ -576,8 +576,22 @@ int ObMultiTenant::init(ObAddr myaddr,
   }
 
   //initialize Python Intepreter
-  Py_InitializeEx(!Py_IsInitialized());
-  _save = PyEval_SaveThread();
+  {
+    SpinWLockGuard guard(lock_);
+    if (!Py_IsInitialized()) {
+      Py_InitializeEx(0);
+      PyImport_ImportModule("dycacher");
+      PyImport_ImportModule("numpy");
+      PyImport_ImportModule("torch");
+      //PyImport_ImportModule("tensorflow");
+      _save = PyEval_SaveThread();
+    }
+  }
+
+  //PyObject *pModule = PyImport_AddModule("__main__");
+  //PyObject *dic = PyModule_GetDict(pModule);
+  //PyRun_StringFlags("import numpy as np", Py_file_input, dic, dic, NULL);
+  //PyRun_StringFlags("import pytorch", Py_file_input, dic, dic, NULL);
 
   if (OB_SUCC(ret)) {
     is_inited_ = true;

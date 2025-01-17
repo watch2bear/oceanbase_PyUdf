@@ -13,6 +13,8 @@ public:
   ObLogPythonUDF(ObLogPlan &plan)
       : ObLogicalOperator(plan),
         python_udf_exprs_(),
+        python_udf_projection_exprs_(),
+        python_udf_filter_exprs_(),
         metas_()
   {}
 
@@ -21,8 +23,17 @@ public:
   int generate_input_exprs();
   inline int add_python_udf_expr(ObPythonUdfRawExpr *python_udf_expr)
   { return python_udf_exprs_.push_back(python_udf_expr); }
+  inline int add_python_udf_projection_expr(ObRawExpr *python_udf_projection_expr)
+  { return python_udf_projection_exprs_.push_back(python_udf_projection_expr); }
+  inline int add_python_filter_udf_expr(ObRawExpr *python_udf_filter_expr)
+  { return python_udf_filter_exprs_.push_back(python_udf_filter_expr); }
+
   inline ObIArray<ObPythonUdfRawExpr *> &get_python_udf_exprs() { return python_udf_exprs_; }
   inline const ObIArray<ObPythonUdfRawExpr *> &get_python_udf_exprs() const { return python_udf_exprs_; }
+  inline ObIArray<ObRawExpr *> &get_python_udf_projection_exprs() { return python_udf_projection_exprs_; }
+  inline const ObIArray<ObRawExpr *> &get_python_udf_projection_exprs() const { return python_udf_projection_exprs_; }
+  inline ObIArray<ObRawExpr *> &get_python_udf_filter_exprs() { return python_udf_filter_exprs_; }
+  inline const ObIArray<ObRawExpr *> &get_python_udf_filter_exprs() const { return python_udf_filter_exprs_; }
 
 
   // show python udfs in explain 
@@ -40,6 +51,8 @@ public:
   
 private:
   ObSEArray<ObPythonUdfRawExpr *, 4, common::ModulePageAllocator, true> python_udf_exprs_;
+  ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> python_udf_projection_exprs_;
+  ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> python_udf_filter_exprs_;
   ObSEArray<ObPythonUDFMeta, 4, common::ModulePageAllocator, true> metas_;
   DISALLOW_COPY_AND_ASSIGN(ObLogPythonUDF);
 };

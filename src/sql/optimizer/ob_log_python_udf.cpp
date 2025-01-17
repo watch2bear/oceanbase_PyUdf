@@ -9,8 +9,8 @@ using namespace oceanbase::common;
 
 int ObLogPythonUDF::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs) {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(append(all_exprs, get_python_udf_exprs()))) {
-    LOG_WARN("get python udf exprs failed", K(ret));
+  if (OB_FAIL(append(all_exprs, python_udf_filter_exprs_))) {
+    LOG_WARN("failed to push back python udf filter exprs", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
     LOG_WARN("get op exprs failed", K(ret));
   } else { /*do noting*/ }
@@ -20,6 +20,8 @@ int ObLogPythonUDF::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs) {
 int ObLogPythonUDF::allocate_expr_post(ObAllocExprContext &ctx)
 {
   int ret = OB_SUCCESS;
+
+  // 生成所有python udf exprs
   for (int64_t i = 0; OB_SUCC(ret) && i < python_udf_exprs_.count(); i++) {
     ObRawExpr *expr = NULL;
     if (OB_ISNULL(expr = python_udf_exprs_.at(i))) {
@@ -27,10 +29,20 @@ int ObLogPythonUDF::allocate_expr_post(ObAllocExprContext &ctx)
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(mark_expr_produced(expr, branch_id_, id_, ctx))) {
       LOG_WARN("failed to mark expr as produced", K(ret));
-    } else if (!is_plan_root() && OB_FAIL(output_exprs_.push_back(expr))) {
+    } else { /*do nothing*/ }
+  }
+
+  // 算子出现在中间时需要在output_exprs内插入python udf projection exprs
+  for (int64_t i = 0; OB_SUCC(ret) && i < python_udf_projection_exprs_.count(); i++) {
+    ObRawExpr *expr = NULL;
+    if (OB_ISNULL(expr = python_udf_projection_exprs_.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret));
+    } else if (!is_plan_root() && OB_FAIL((add_var_to_array_no_dup(output_exprs_, expr)))) {
       LOG_WARN("failed to push back expr", K(ret));
     } else { /*do nothing*/ }
   }
+
   // check if we can produce some more exprs, such as 1 + 'c1' after we have produced 'c1'
   if(OB_SUCC(ret)) {
     if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
@@ -48,7 +60,10 @@ int ObLogPythonUDF::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else {
-    is_fixed = (T_FUN_PYTHON_UDF == expr->get_expr_type() && ObOptimizerUtil::find_item(python_udf_exprs_, expr));
+    //is_fixed = (T_FUN_PYTHON_UDF == expr->get_expr_type() && ObOptimizerUtil::find_item(python_udf_exprs_, expr));
+    is_fixed = T_FUN_PYTHON_UDF == expr->get_expr_type() ||
+               ObOptimizerUtil::find_item(python_udf_projection_exprs_, expr) ||
+               ObOptimizerUtil::find_item(python_udf_filter_exprs_, expr);
   }
   return ret;
 }

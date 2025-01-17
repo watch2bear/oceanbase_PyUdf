@@ -6290,6 +6290,7 @@ int ObDMLResolver::resolve_where_clause(const ParseNode *node)
       OZ(resolve_and_split_sql_expr_with_bool_expr(*node->children_[0],
                                                    stmt->get_condition_exprs()));
     }
+    OZ(generate_python_udf_filters());
     OZ(generate_outer_join_tables());
     OZ(check_equal_conditions_for_resource_group(stmt->get_condition_exprs()));
   }
@@ -16448,6 +16449,50 @@ int ObDMLResolver::add_udt_dependency(const pl::ObUserDefinedType &udt_type)
     }
   }
 
+  return ret;
+}
+
+bool ObDMLResolver::checkExprContainType(ObRawExpr *expr, ObItemType type) {
+  if (expr->get_expr_type() == type) {
+    return true;
+  } else if (expr->get_param_count() == 0) {
+    return false;
+  } else {
+    bool res = false;
+    for (int i = 0; i < expr->get_param_count(); ++i) {
+      res = res || checkExprContainType(expr->get_param_expr(i), type);
+    }
+    return res;
+  }
+}
+
+int ObDMLResolver::generate_python_udf_filters()
+{
+  int ret = OB_SUCCESS;
+  ObDMLStmt *stmt = get_stmt();
+  CK(OB_NOT_NULL(stmt));
+
+  ObIArray<ObRawExpr *> &condition_exprs = stmt->get_condition_exprs();
+  ObIArray<ObRawExpr *> &python_udf_filter_exprs = stmt->get_python_udf_filter_exprs();
+
+  if (OB_SUCC(ret)) {
+    ObRawExpr *condition_expr = NULL;
+    int i = 0;
+    while (OB_SUCC(ret) && i < stmt->get_condition_size()) {
+      condition_expr = stmt->get_condition_expr(i);
+      if (OB_ISNULL(condition_expr)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("get unexpected null", K(ret));
+      } else if (!checkExprContainType(condition_expr, T_FUN_PYTHON_UDF)) {
+        // skip it
+        ++i;
+      } else if (OB_FAIL(python_udf_filter_exprs.push_back(condition_expr))) {
+        LOG_WARN("push expr to python udf filter exprs failed", K(ret));
+      } else if (OB_FAIL(condition_exprs.remove(i))) {
+        LOG_WARN("remove python udf filter exprs from stmt conditions failed", K(ret));
+      } else {}
+    }
+  }
   return ret;
 }
 

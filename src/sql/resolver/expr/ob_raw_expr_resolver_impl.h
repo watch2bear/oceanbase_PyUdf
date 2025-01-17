@@ -311,7 +311,8 @@ inline bool ObRawExprResolverImpl::is_win_expr_valid_scope(ObStmtScope scope) co
 
 inline bool ObRawExprResolverImpl::is_python_udf_expr_valid_scope(ObStmtScope scope) const
 {
-  return scope == T_FIELD_LIST_SCOPE;
+  return scope == T_FIELD_LIST_SCOPE // 允许python udf 出现在 select 子句中
+    || scope == T_WHERE_SCOPE; // 允许python udf 出现在 where 子句中
 }
 
 inline bool ObRawExprResolverImpl::is_pseudo_column_valid_scope(ObStmtScope scope) const

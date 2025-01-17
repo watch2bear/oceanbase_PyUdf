@@ -934,13 +934,18 @@ int generate_window_functions_plan(WinFuncOpHelper &win_func_helper,
   // python udf resolver
   struct PythonUDFOpHelper
   {
-    PythonUDFOpHelper(const ObIArray<ObPythonUdfRawExpr*> &all_python_udf_exprs)
-      : all_python_udf_exprs_(all_python_udf_exprs)
-    {}
+    PythonUDFOpHelper(const ObIArray<ObPythonUdfRawExpr*> &all_python_udf_exprs,
+                      const ObIArray<ObRawExpr*> &python_udf_projection_exprs,
+                      const ObIArray<ObRawExpr*> &python_udf_filter_exprs)
+      : all_python_udf_exprs_(all_python_udf_exprs),
+        python_udf_projection_exprs_(python_udf_projection_exprs),
+        python_udf_filter_exprs_(python_udf_filter_exprs) {}
     virtual ~PythonUDFOpHelper() {}
 
     // const
     const ObIArray<ObPythonUdfRawExpr*> &all_python_udf_exprs_;
+    const ObIArray<ObRawExpr*> &python_udf_projection_exprs_;
+    const ObIArray<ObRawExpr*> &python_udf_filter_exprs_;
 
     // attributes
 
@@ -948,8 +953,13 @@ int generate_window_functions_plan(WinFuncOpHelper &win_func_helper,
 
   int candi_allocate_python_udf();
 
+  int get_python_udf_exprs_from_top(const ObLogicalOperator *top,
+                                    const ObIArray<ObPythonUdfRawExpr*> &python_udf_exprs,
+				                            ObIArray<ObRawExpr *> &python_udf_projection_exprs);
+
   int candi_allocate_python_udf(const ObIArray<ObPythonUdfRawExpr*> &python_udf_exprs,
-                                //const ObIArray<ObRawExpr*> &qualify_filters,
+                                const ObIArray<ObRawExpr*> &python_udf_projection_exprs,
+                                const ObIArray<ObRawExpr*> &python_udf_filter_exprs,
                                 ObIArray<CandidatePlan> &total_plans);
 
   int generate_python_udf_plans(PythonUDFOpHelper &python_udf_helper,
@@ -958,7 +968,9 @@ int generate_window_functions_plan(WinFuncOpHelper &win_func_helper,
                                 CandidatePlan &orig_candidate_plan);
 
   int allocate_python_udf_op_as_top(ObLogicalOperator *&top,
-                                    const ObIArray<ObPythonUdfRawExpr*> &python_udf_exprs);
+                                    const ObIArray<ObPythonUdfRawExpr*> &python_udf_exprs,
+                                    const ObIArray<ObRawExpr*> &python_udf_projection_exprs,
+                                    const ObIArray<ObRawExpr*> &python_udf_filter_exprs);
   
   DISALLOW_COPY_AND_ASSIGN(ObSelectLogPlan);
 };

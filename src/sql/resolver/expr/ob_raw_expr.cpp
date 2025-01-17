@@ -4641,11 +4641,11 @@ int ObPythonUdfRawExpr::set_udf_meta(share::schema::ObPythonUDF &udf, int batch_
 {
   int ret = OB_SUCCESS;
   udf_meta_.init_ = false;
-  if (OB_UNLIKELY(0 == batch_size)) {
+  if (0 == batch_size) {
     udf_meta_.batch_size_const_ = false;   //batch_size动态调整
     udf_meta_.batch_size_ = 256;       //batch_size初始值为256
   } else {
-    if (OB_UNLIKELY(256 > batch_size) || OB_UNLIKELY(8192 < batch_size)) {
+    if (256 > batch_size || 8192 < batch_size) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid predict batch_size", K(batch_size), K(ret));
     } else {

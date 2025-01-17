@@ -1056,6 +1056,17 @@ public:
 
   int get_qb_name(ObString &qb_name) const;
 
+    // for python udf filter
+  bool has_python_udf_filter() const { return python_udf_filter_exprs_.count() != 0; }
+  const common::ObIArray<ObRawExpr *> &get_python_udf_filter_exprs() const { return python_udf_filter_exprs_; };
+  common::ObIArray<ObRawExpr *> &get_python_udf_filter_exprs() { return python_udf_filter_exprs_; };
+  const ObRawExpr* get_python_udf_filter_expr(int64_t i) const { return python_udf_filter_exprs_.at(i); }
+  ObRawExpr* get_python_udf_filter_expr(int64_t i) { return python_udf_filter_exprs_.at(i); }
+  int64_t get_python_udf_filter_count() const { return python_udf_filter_exprs_.count(); }
+  int add_python_udf_filter_expr(ObRawExpr *expr);
+  int remove_python_udf_filter_expr(ObRawExpr *expr);
+  ObRawExpr* get_same_python_udf_filter_item(const ObRawExpr *expr);
+
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_),
                N_TABLE, table_items_,
                N_PARTITION_EXPR, part_expr_items_,
@@ -1063,6 +1074,7 @@ public:
                N_COLUMN, nextval_sequence_ids_,
                N_COLUMN, currval_sequence_ids_,
                N_WHERE, condition_exprs_,
+               N_PYTHON_UDF_FILTER, python_udf_filter_exprs_,
                N_ORDER_BY, order_items_,
                N_LIMIT, limit_count_expr_,
                N_OFFSET, limit_offset_expr_,
@@ -1232,6 +1244,7 @@ protected:
   common::ObSEArray<TableItem *, 4, common::ModulePageAllocator, true> table_items_;
   common::ObSEArray<ColumnItem, 16, common::ModulePageAllocator, true> column_items_;
   common::ObSEArray<ObRawExpr *, 16, common::ModulePageAllocator, true> condition_exprs_;
+  common::ObSEArray<ObRawExpr *, 16, common::ModulePageAllocator, true> python_udf_filter_exprs_;
   // 存放共享的类伪列表达式, 我们认为除了一般的伪列表达式ObPseudoColumnRawExpr, rownum和sequence也属于伪列
   common::ObSEArray<ObRawExpr *, 8, common::ModulePageAllocator, true> pseudo_column_like_exprs_;
   ObDMLStmtTableHash tables_hash_;

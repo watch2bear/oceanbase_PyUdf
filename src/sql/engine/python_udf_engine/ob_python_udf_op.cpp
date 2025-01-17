@@ -13,6 +13,8 @@ using namespace common;
 namespace sql
 {
 
+static bool with_batch_control_ = true; // 是否进行batch size控制
+
 OB_SERIALIZE_MEMBER((ObPythonUDFSpec, ObOpSpec),
                     udf_exprs_,
                     input_exprs_);
@@ -49,13 +51,22 @@ ObPythonUDFOp::~ObPythonUDFOp() {
 int ObPythonUDFOp::inner_open()
 {
   int ret = OB_SUCCESS;
+
+  //initialize Python Intepreter
+  //Py_InitializeEx(!Py_IsInitialized());
+  //_save = PyEval_SaveThread();
+
   // init context
   const uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
   if (OB_FAIL(controller_.init(MY_SPEC.max_batch_size_,
                                MY_SPEC.udf_exprs_, 
                                MY_SPEC.input_exprs_,
                                tenant_id))) {
+    ret = OB_INIT_FAIL;
     LOG_WARN("Init python udf store controller failed", K(ret));
+  //} else if (OB_FAIL(init_udfs(MY_SPEC.udf_exprs_))) {
+  //  ret = OB_INIT_FAIL;
+  //  LOG_WARN("Import python udfs", K(ret));
   } else {
     // check attrs
     ret = ObOperator::inner_open();
@@ -67,6 +78,10 @@ int ObPythonUDFOp::inner_open()
 int ObPythonUDFOp::inner_close()
 {
   int ret = OB_SUCCESS;
+
+  //PyEval_RestoreThread((PyThreadState *)_save);
+  //Py_FinalizeEx(); // Python Intepreter
+
   // free attrs;
   if (OB_FAIL(controller_.free())) {
     ret = OB_ERR_UNEXPECTED;
@@ -75,6 +90,19 @@ int ObPythonUDFOp::inner_close()
     ret = ObOperator::inner_close();
   }
   //ret = ObOperator::inner_close();
+  /*PyObject *dycacher; // dycacher module
+  PyObject *clearFunc; // reset function
+  if((dycacher = PyImport_ImportModule("dycacher")) == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get dycacher module", K(ret));
+  } else if ((clearFunc = PyObject_GetAttrString(dycacher, "reset_cache")) == nullptr ||
+              !PyCallable_Check(clearFunc)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get reset cacher function", K(ret));
+  } else if (PyObject_CallObject(clearFunc, NULL) == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to call reset cacher function", K(ret));
+  } else {}*/
   return ret;
 }
 
@@ -134,12 +162,36 @@ int ObPythonUDFOp::inner_get_next_batch(const int64_t max_row_cnt)
     gstate = PyGILState_Ensure();
     nStatus = true;
   }
-
-  /*if (OB_SUCC(ret) && !controller_.can_output()) {
-    clear_evaluated_flag();
-    controller_.resize(controller_.get_desirable());
-    const ObBatchRows *child_brs = nullptr;
-    while (OB_SUCC(ret) && !brs_.end_ && !controller_.is_full()) { // while loop直至缓存填满
+  //struct timeval t1, t2;
+  //gettimeofday(&t1, NULL);
+  
+  if (with_batch_control_) {
+    if (OB_SUCC(ret) && !controller_.can_output()) {
+      clear_evaluated_flag();
+      controller_.resize(controller_.get_desirable() * BUFFER_MAG);
+      const ObBatchRows *child_brs = nullptr;
+      while (OB_SUCC(ret) && !brs_.end_ && !controller_.is_full()) { // while loop直至缓存填满
+        if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Get child next batch failed.", K(ret));
+        } else if (brs_.copy(child_brs)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Copy child batch rows failed.", K(ret));
+        } else if (OB_FAIL(controller_.store(eval_ctx_, brs_))){
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Save input batchrows failed.", K(ret));
+        }
+      }
+      if (OB_FAIL(ret) || OB_FAIL(controller_.process())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Process python udf failed.", K(ret));
+      }
+    }
+  } else { // 无batch size控制
+    if (OB_SUCC(ret)) { 
+      clear_evaluated_flag();
+      controller_.resize(controller_.get_desirable() * BUFFER_MAG);
+      const ObBatchRows *child_brs = nullptr;
       if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Get child next batch failed.", K(ret));
@@ -149,39 +201,31 @@ int ObPythonUDFOp::inner_get_next_batch(const int64_t max_row_cnt)
       } else if (OB_FAIL(controller_.store(eval_ctx_, brs_))){
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Save input batchrows failed.", K(ret));
-      }
+      } else if (OB_FAIL(controller_.process())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Process python udf failed.", K(ret));
+      } else {}
     }
-    if (OB_FAIL(ret) || OB_FAIL(controller_.process())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Process python udf failed.", K(ret));
-    }
-  }*/
-
-  
-  if (OB_SUCC(ret)) { // 无batch size控制
-    clear_evaluated_flag();
-    controller_.resize(controller_.get_desirable());
-    const ObBatchRows *child_brs = nullptr;
-    if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Get child next batch failed.", K(ret));
-    } else if (brs_.copy(child_brs)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Copy child batch rows failed.", K(ret));
-    } else if (OB_FAIL(controller_.store(eval_ctx_, brs_))){
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Save input batchrows failed.", K(ret));
-    } else if (OB_FAIL(controller_.process())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Process python udf failed.", K(ret));
-    } else {}
   }
-
 
   if (OB_FAIL(ret) || OB_FAIL(controller_.restore(eval_ctx_, brs_, max_row_cnt))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Restore output batchrows failed.", K(ret));
+  } else {
+    // reset all spec filters
+    FOREACH_CNT_X(e, MY_SPEC.filters_, OB_SUCC(ret)) {
+      (*e)->clear_evaluated_flag(eval_ctx_);
+      (*e)->get_eval_info(eval_ctx_).clear_evaluated_flag();
+    }
   }
+  /*gettimeofday(&t2, NULL);
+  double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec);
+  double time_s = timeuse / 1000;
+  std::fstream time_log;
+  // operater time log
+  time_log.open("/home/test/experiments/oceanbase/revision/limit1/op_time.log", std::ios::app);
+  time_log << "operator time: " << time_s << std::endl;
+  time_log.close(); */
 
   //PyGC_Enable();
   //PyGC_Collect();
@@ -224,6 +268,138 @@ int ObPythonUDFOp::clear_calc_exprs_evaluated_flags()
   int ret = OB_SUCCESS;
   for (int i = 0; i < MY_SPEC.calc_exprs_.count(); i++) {
     MY_SPEC.calc_exprs_[i]->get_eval_info(eval_ctx_).clear_evaluated_flag();
+  }
+  return ret;
+}
+
+int ObPythonUDFOp::init_udfs(const common::ObIArray<ObExpr *> &udf_exprs)
+{
+  int ret = OB_SUCCESS;
+  //Acquire GIL
+  bool nStatus = PyGILState_Check();
+  PyGILState_STATE gstate;
+  if(!nStatus) {
+    gstate = PyGILState_Ensure();
+    nStatus = true;
+  }
+  // init all python udfs
+  for (int i = 0; OB_SUCC(ret) && i < udf_exprs.count(); ++i) {
+    ObExpr *udf_expr = udf_exprs.at(i);
+    ObPythonUDFMeta udf_meta = static_cast<ObPythonUdfInfo *>(udf_expr->extra_info_)->udf_meta_;
+    if (udf_meta.init_) {
+      LOG_DEBUG("udf meta has already inited", K(ret));
+    } else if (udf_meta.ret_ == ObPythonUDF::PyUdfRetType::UDF_UNINITIAL) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("udf meta ret type is null", K(ret));
+    } else if (udf_meta.pycall_ == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("udf meta pycall is null", K(ret));
+    } else {
+      // check udf param types
+      for (int j = 0; OB_SUCC(ret) && j < udf_expr->arg_cnt_; ++j) {
+        ObExpr *expr = udf_expr->args_[j];
+        if (expr == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("python udf arg expr is null", K(ret));
+        } else {
+          switch(expr->datum_meta_.type_) {
+            case ObCharType :
+            case ObVarcharType :
+            case ObTinyTextType :
+            case ObTextType :
+            case ObMediumTextType :
+            case ObLongTextType : 
+              if(udf_meta.udf_attributes_types_.at(j) != ObPythonUDF::STRING) {
+                  ret = OB_ERR_UNEXPECTED;
+                  LOG_WARN("the type of param is incorrect", K(ret), K(j));
+              }
+              break;
+            case ObTinyIntType :
+            case ObSmallIntType :
+            case ObMediumIntType :
+            case ObInt32Type :
+            case ObIntType : 
+              if(udf_meta.udf_attributes_types_.at(j) != ObPythonUDF::INTEGER) {
+                  ret = OB_ERR_UNEXPECTED;
+                  LOG_WARN("the type of param is incorrect", K(ret), K(j));
+              }
+              break;
+            case ObDoubleType : 
+              if(udf_meta.udf_attributes_types_.at(j) != ObPythonUDF::REAL) {
+                  ret = OB_ERR_UNEXPECTED;
+                  LOG_WARN("the type of param is incorrect", K(ret), K(j));
+              }
+              break;
+            case ObNumberType : 
+                //decimal
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("not support decimal", K(ret), K(j));
+                break;
+            default : 
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("not support param type", K(ret));
+          }
+        }
+      }
+      // import python udf code
+      if (OB_FAIL(ret) || OB_FAIL(import_udf(udf_meta))) {
+        ret = OB_INIT_FAIL;
+        LOG_WARN("Fail to import udf", K(ret));
+      } else {
+        udf_meta.init_ = true;
+      }
+    }
+  }
+  //release GIL
+  if(nStatus)
+    PyGILState_Release(gstate);
+  return ret;
+}
+
+int ObPythonUDFOp::import_udf(const share::schema::ObPythonUDFMeta &udf_meta)
+{
+  int ret = OB_SUCCESS;
+
+  //runtime variables
+  PyObject *pModule = NULL;
+  PyObject *dic = NULL;
+  PyObject *v = NULL;
+  PyObject *pInitial = NULL;
+
+  //name
+  std::string name(udf_meta.name_.ptr());
+  name = name.substr(0, udf_meta.name_.length());
+  std::string pyinitial_handler = name + "_pyinitial";
+  std::string pyfun_handler = name + "_pyfun";
+  //pycall
+  std::string pycall(udf_meta.pycall_.ptr());
+  pycall = pycall.substr(0, udf_meta.pycall_.length());
+  pycall.replace(pycall.find("pyinitial"), 9, pyinitial_handler);
+  pycall.replace(pycall.find("pyfun"), 5, pyfun_handler);
+  const char* pycall_c = pycall.c_str();
+
+  // prepare and import python code
+  pModule = PyImport_AddModule("__main__"); // load main module
+  if(pModule == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to import main module", K(ret));
+  } else if ((dic = PyModule_GetDict(pModule)) == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get main module dic", K(ret));
+  } else if ((v = PyRun_StringFlags(pycall_c, Py_file_input, dic, dic, NULL)) == nullptr) {
+    ObExprPythonUdf::process_python_exception();
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to write pycall into module", K(ret));
+  } else if ((pInitial = PyObject_GetAttrString(pModule, pyinitial_handler.c_str())) == nullptr) {
+    ObExprPythonUdf::process_python_exception();
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Fail to import pyinitial", K(ret));
+  } else if (PyObject_CallObject(pInitial, NULL) == nullptr) {
+    ObExprPythonUdf::process_python_exception();
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Fail to run pyinitial", K(ret));
+  } else {
+    LOG_DEBUG("Import python udf handler", K(ret));
   }
   return ret;
 }
@@ -355,19 +531,25 @@ int ObColInputStore::save_vector(ObEvalCtx &eval_ctx, ObBatchRows &brs)
           /* do nothing */
         } else {
           // deep copy from vector to datums
-          ObLength copy_len;
+          ObLength copy_len = 0;
           const char *payload;
           vector->get_payload(j, payload, copy_len);
           char *buf = nullptr;
-          buf = static_cast<char *>(tmp_alloc_.alloc(copy_len));
-          if (buf == nullptr) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("allocate memory failed", K(copy_len), K(ret));
-          } else {
-            MEMCPY(buf, payload, copy_len);
-            dst[dst_idx].ptr_ = buf;
-            dst[dst_idx].len_ = copy_len;
+          if (copy_len == 0) {
+            dst[dst_idx].ptr_ = nullptr;
+            dst[dst_idx].len_ = 0;
             ++dst_idx;
+          } else {
+            buf = static_cast<char *>(tmp_alloc_.alloc(copy_len));
+            if (buf == nullptr) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("allocate memory failed", K(copy_len), K(ret));
+            } else {
+              MEMCPY(buf, payload, copy_len);
+              dst[dst_idx].ptr_ = buf;
+              dst[dst_idx].len_ = copy_len;
+              ++dst_idx;
+            }
           }
         }
       }
@@ -410,7 +592,10 @@ int ObColInputStore::load_vector(ObEvalCtx &eval_ctx, int64_t load_size)
   } else {
     for (int64_t i = 0; i < exprs_.count(); ++i) {
       ObExpr *expr = exprs_.at(i);
-      expr->init_vector_for_write(eval_ctx, expr->get_default_res_format(), load_size);
+      //if (expr->datum_meta_.type_ == ObVarcharType || expr->datum_meta_.type_ == ObCharType)
+        //expr->init_vector(eval_ctx, VEC_DISCRETE, load_size, false);
+      //else
+      expr->init_vector(eval_ctx, expr->get_default_res_format(), load_size, true);
       ObDatum *src = datums_copy_.at(i);
       ObIVector *dst = expr->get_vector(eval_ctx);
       for (int j = 0; j < load_size; ++j) {
@@ -439,8 +624,7 @@ int ObPUInputStore::init(common::ObIAllocator *alloc, ObExpr *expr, int64_t leng
   } else {
     buf_alloc_ = alloc;
     expr_ = expr;
-    length_ = length;
-    if (OB_FAIL(alloc_data_ptrs()) || data_ptrs_ == nullptr) {
+    if (OB_FAIL(alloc_data_ptrs(length)) || data_ptrs_ == nullptr) {
       ret = OB_INIT_FAIL;
       LOG_WARN("Init ObPUInputStore failed.", K(ret), K(alloc), K(expr->arg_cnt_));
     } else {
@@ -451,13 +635,13 @@ int ObPUInputStore::init(common::ObIAllocator *alloc, ObExpr *expr, int64_t leng
   return ret;
 }
 
-int ObPUInputStore::alloc_data_ptrs()
+int ObPUInputStore::alloc_data_ptrs(int64_t length)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_) ) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Repeat allocation.", K(ret));
-  } else if (buf_alloc_ == nullptr || expr_ == nullptr || expr_->arg_cnt_ <= 0 || length_ <= 0) {
+  } else if (buf_alloc_ == nullptr || expr_ == nullptr || expr_->arg_cnt_ <= 0 || length <= 0) {
     ret = OB_NOT_INIT;
     LOG_WARN("Uninit allocator and expression.", K(ret));
   } else {
@@ -478,7 +662,7 @@ int ObPUInputStore::alloc_data_ptrs()
         case ObTextType:
         case ObMediumTextType:
         case ObLongTextType: {
-          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length_ * sizeof(ObDatum))); // string lists
+          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length * sizeof(ObDatum))); // string lists
           break;
         }
         case ObTinyIntType:
@@ -486,11 +670,11 @@ int ObPUInputStore::alloc_data_ptrs()
         case ObMediumIntType:
         case ObInt32Type:
         case ObIntType: {
-          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length_ * sizeof(int))); // int lists
+          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length * sizeof(int))); // int lists
           break;
         }
         case ObDoubleType: {
-          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length_ * sizeof(double))); // double lists
+          data_ptrs_[i] = reinterpret_cast<char *>(buf_alloc_->alloc(length * sizeof(double))); // double lists
           break;
         }
         default: {
@@ -500,9 +684,12 @@ int ObPUInputStore::alloc_data_ptrs()
       }
       if (data_ptrs_[i] == nullptr) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Allocate data_ptr_[i] memory failed.", K(ret), K(buf_alloc_), K(length_), K(i), K(e->datum_meta_.type_));
+        LOG_WARN("Allocate data_ptr_[i] memory failed.", K(ret), K(buf_alloc_), K(length), K(i), K(e->datum_meta_.type_));
       }
     }
+  }
+  if (OB_SUCC(ret)) {
+    length_ = length;
   }
   return ret;
 }
@@ -522,7 +709,7 @@ int ObPUInputStore::reset(int64_t length /* default = 0 */)
     ret = reuse();
   } else if (OB_FAIL(free())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(alloc_data_ptrs())) {
+  } else if (OB_FAIL(alloc_data_ptrs(length))) {
     ret = OB_INIT_FAIL;
   } else {
     saved_size_ = 0;
@@ -717,8 +904,10 @@ int ObPythonUDFCell::do_process_all()
   result_size_ = 0;
   PyObject *pArgs = nullptr;
   int64_t eval_size;
+  struct timeval t1, t2;
   //load numpy api
   _import_array();
+  //gettimeofday(&t1, NULL);
   if (OB_FAIL(wrap_input_numpy(pArgs, eval_size)) || pArgs == nullptr) { // wrap all input
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Wrap Cell Input Store as Python UDF input args failed.", K(ret));
@@ -728,9 +917,16 @@ int ObPythonUDFCell::do_process_all()
   } else { /* do nothing */ }
   Py_CLEAR(pArgs);
 
-  if (OB_SUCC(ret)) {
-    input_store_.reuse();
-  }
+  //gettimeofday(&t2, NULL);
+  /*double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
+  double tps = eval_size * 1000000 / timeuse; // current tuples per sec
+  double time_s = timeuse / 1000;
+  std::fstream tps_log;
+  tps_log.open("/home/test/experiments/oceanbase/revision/pps/unopt_pf_time_pps.log", std::ios::app);
+  tps_log << "process time: " << time_s << std::endl;
+  tps_log << "batch size: " << eval_size << std::endl;
+  tps_log << "prediction processing speed: " << tps << std::endl;
+  tps_log.close();*/
   return ret;
 }
 
@@ -744,6 +940,9 @@ int ObPythonUDFCell::do_process()
   int64_t eval_size = 0;
   //load numpy api
   _import_array();
+  ObPythonUdfInfo *info = static_cast<ObPythonUdfInfo *>(expr_->extra_info_);
+  // bool batch_size_const = info->udf_meta_.batch_size_const_;
+  bool batch_size_const = false;
   for (int idx = 0; OB_SUCC(ret) && idx < input_store_.get_saved_size(); idx += eval_size) {
     gettimeofday(&t1, NULL);
     PyObject *pArgs = nullptr;
@@ -755,9 +954,25 @@ int ObPythonUDFCell::do_process()
       LOG_WARN("Eval Python UDF failed.", K(ret));
     } else {
       gettimeofday(&t2, NULL);
-      modify_desirable(t1, t2, eval_size);
+      ObPythonUdfInfo *info = static_cast<ObPythonUdfInfo *>(expr_->extra_info_);
+      if (!batch_size_const)
+        modify_desirable(t1, t2, eval_size);
+
+      /*double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
+      double time_s = timeuse / 1000;
+      double tps = eval_size * 1000000 / timeuse; // current tuples per sec
+      std::fstream tps_log;
+      tps_log.open("/home/test/experiments/oceanbase/revision/pps/opt_pf_time_pps.log", std::ios::app);
+      tps_log << "process time: " << time_s << std::endl;
+      tps_log << "batch size: " << eval_size << std::endl;
+      tps_log << "prediction processing speed: " << tps << std::endl;
+      tps_log.close();*/
+      // std::fstream time_log;
+      // time_log.open("/home/test/experiments/oceanbase/opt/pf_time.log", std::ios::app);
+      // time_log << time_s << " ";
+      // time_log.close(); 
+      Py_CLEAR(pArgs);
     }
-    Py_CLEAR(pArgs);
   }
   return ret;
 }
@@ -771,7 +986,7 @@ int ObPythonUDFCell::do_restore(ObEvalCtx &eval_ctx, int64_t output_idx, int64_t
   } else if (expr_ == nullptr) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected nullptr expr_.", K(ret));
-  } else if (expr_->enable_rich_format() && OB_FAIL(do_restore_vector(eval_ctx, output_idx, output_size))){
+  } else if (expr_->enable_rich_format() && OB_FAIL(do_restore_vector(eval_ctx, output_idx, output_size))) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Unsupported result type.", K(ret));
   } else if (!expr_->enable_rich_format() && OB_FAIL(do_restore_batch(eval_ctx, output_idx, output_size))) {
@@ -851,7 +1066,6 @@ int ObPythonUDFCell::do_restore_vector(ObEvalCtx &eval_ctx, int64_t output_idx, 
       LOG_WARN("Unsupported result type.", K(ret));
   }
   expr_->init_vector_for_write(eval_ctx, format, batch_size_);
-  //}
   ObIVector *vector = expr_->get_vector(eval_ctx);
   PyArrayObject *result_store = reinterpret_cast<PyArrayObject *>(result_store_);
   // 构造vector并赋回expr_
@@ -873,8 +1087,6 @@ int ObPythonUDFCell::do_restore_vector(ObEvalCtx &eval_ctx, int64_t output_idx, 
     case ObMediumIntType:
     case ObInt32Type:
     case ObIntType: {
-      //VectorFormat format = VEC_FIXED;
-      //expr_->init_vector_for_write(eval_ctx, format, batch_size_);
       for (int i = 0; i < output_size; ++i) {
         vector->set_int(i, PyLong_AsLong(
           PyArray_GETITEM(result_store, (char *)PyArray_GETPTR1(result_store, output_idx + i))));
@@ -1038,6 +1250,11 @@ int ObPythonUDFCell::modify_desirable(timeval &start, timeval &end, int64_t eval
   ObPythonUdfInfo *info = static_cast<ObPythonUdfInfo *>(expr_->extra_info_);
   double timeuse = (end.tv_sec - start.tv_sec) * 1000000 + (double)(end.tv_usec - start.tv_usec); // usec
   double tps = eval_size * 1000000 / timeuse; // current tuples per sec
+  // std::fstream tps_log;
+  // tps_log.open("/home/test/experiments/oceanbase/opt/both_pps.log", std::ios::app);
+  // tps_log << "batch size: " << eval_size << std::endl;
+  // tps_log << "prediction processing speed: " << tps << std::endl;
+  // tps_log.close();
   if (info->tps_s == 0) { // 初始化
     info->tps_s = tps;
     info->predict_size += info->delta; // 尝试调整
@@ -1049,6 +1266,11 @@ int ObPythonUDFCell::modify_desirable(timeval &start, timeval &end, int64_t eval
       info->round++;
     info->tps_s = tps;
     info->predict_size += info->delta;
+    /*// 采集batch size变化日志
+    std::fstream batch_size_control_log;
+    batch_size_control_log.open("/home/test/experiments/oceanbase/revision/batch_control_overhead/batch_size_control.log", std::ios::app);
+    batch_size_control_log << "eval size:" << eval_size << ", current desirable predict size:" << info->predict_size << std::endl;
+    batch_size_control_log.close();*/
   } else { //tps <= info->tps_s
     // 未达到阈值
     info->tps_s = (1 - info->alpha) * info->tps_s + info->alpha * tps; // 平滑系数α
@@ -1159,6 +1381,9 @@ int ObPUStoreController::process()
   if (is_empty()) {
     /* do nothing */
   } else {
+    //struct timeval t3, t4;
+    //gettimeofday(&t3, NULL);
+    
     ObPythonUDFCell* header = cells_list_.get_header();
     for (ObPythonUDFCell* cell = cells_list_.get_first(); 
         cell != header && OB_SUCC(ret); 
@@ -1166,10 +1391,12 @@ int ObPUStoreController::process()
       if (cell->get_store_size() != stored_input_cnt_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unsaved input rows.", K(ret));
-      //} else if (OB_FAIL(cell->do_process())) {
-      } else if (OB_FAIL(cell->do_process_all())) {  // without predict size control
+      } else if (with_batch_control_ && OB_FAIL(cell->do_process())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Do Python UDF Cell process udf failed.", K(ret));
+      } else if (!with_batch_control_ && OB_FAIL(cell->do_process_all())) {  // without predict size control
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Do Python UDF Cell process all udf failed.", K(ret));
       } else if (cell->get_result_size() != stored_input_cnt_){
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unprocessed input rows.", K(ret));
@@ -1182,6 +1409,16 @@ int ObPUStoreController::process()
       stored_input_cnt_ = 0;
       output_idx_ = 0;
     }
+
+    /*
+    // pf time log
+    gettimeofday(&t4, NULL);
+    double timeuse2 = (t4.tv_sec - t3.tv_sec) * 1000000 + (double)(t4.tv_usec - t3.tv_usec); // usec
+    double time_s2 = timeuse2 / 1000;
+    std::fstream time_log2;
+    time_log2.open("/home/test/experiments/oceanbase/revision/batch_control_overhead/process_time.log", std::ios::app);
+    time_log2 << "process time: " << time_s2 << std::endl;
+    time_log2.close(); */
   }
   return ret;
 }

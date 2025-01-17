@@ -9,7 +9,7 @@ echo $loc2
 echo $loc3
 
 #build_debug or build_release ob
-bash build.sh $1 -DOB_USE_CCACHE=ON --init --make -j16
+bash build.sh $1 -DOB_USE_CCACHE=ON --init --make -j
 
 #stop obcluster
 obd cluster stop obcluster

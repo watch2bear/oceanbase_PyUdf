@@ -351,6 +351,7 @@ private:
   int check_listagg_aggr_param_valid(ObAggFunRawExpr *aggr_expr);
 
   int add_alias_from_dot_notation(ObRawExpr *sel_expr, SelectItem& select_item);
+  int mock_python_udf_filter_exprs();
 protected:
   // data members
   /*these member is only for with clause*/

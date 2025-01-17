@@ -6203,17 +6203,31 @@ int ObStaticEngineCG::generate_spec(
     }
   };
 
-  ExprIArray &self_output_exprs = op.get_output_exprs();
+  /*ExprIArray &self_output_exprs = op.get_output_exprs();
+  ExprIArray &self_filter_exprs = op.get_filter_exprs();
   ExprIArray &child_output_exprs = op.get_child(0)->get_output_exprs();
   ObSEArray<ObRawExpr *, 16> other_input_exprs;
   for (int i = 0; i < self_output_exprs.count(); ++i) {
     findOtherInputs(self_output_exprs.at(i), other_input_exprs, child_output_exprs);
   }
-
+  for (int i = 0; i < self_filter_exprs.count(); ++i) {
+    findOtherInputs(self_filter_exprs.at(i), other_input_exprs, child_output_exprs);
+  }
+  
   //generate input exprs (but not calculated by python udfs)
   OZ(spec.input_exprs_.init(other_input_exprs.count()));
   for (int i = 0; i < other_input_exprs.count(); ++i) {
     ObRawExpr *raw_expr = other_input_exprs.at(i);
+    ObExpr *rt_expr = NULL;
+    OZ(generate_rt_expr(*raw_expr, rt_expr));
+    OZ(spec.input_exprs_.push_back(rt_expr));
+  }*/
+
+  //generate input exprs from child operator
+  ExprIArray &child_output_exprs = op.get_child(0)->get_output_exprs();
+  OZ(spec.input_exprs_.init(child_output_exprs.count()));
+  for (int i = 0; i < child_output_exprs.count(); ++i) {
+    ObRawExpr *raw_expr = child_output_exprs.at(i);
     ObExpr *rt_expr = NULL;
     OZ(generate_rt_expr(*raw_expr, rt_expr));
     OZ(spec.input_exprs_.push_back(rt_expr));
