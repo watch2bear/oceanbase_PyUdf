@@ -808,6 +808,11 @@ public:
                                const ObRawExpr *val_ref,
                                const ObRawExpr *col_ref,
                                ObRawExpr *&expr);
+  static int create_greater_expr(ObRawExprFactory &expr_factory,
+                               const ObSQLSessionInfo *session_info,
+                               const ObRawExpr *val_ref,
+                               const ObRawExpr *col_ref,
+                               ObRawExpr *&expr);
   static int create_double_op_expr(ObRawExprFactory &expr_factory,
                                    const ObSQLSessionInfo *session_info,
                                    ObItemType expr_type,

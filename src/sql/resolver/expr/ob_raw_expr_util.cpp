@@ -6319,6 +6319,27 @@ int ObRawExprUtils::create_equal_expr(ObRawExprFactory &expr_factory,
   return ret;
 }
 
+int ObRawExprUtils::create_greater_expr(ObRawExprFactory &expr_factory,
+                                      const ObSQLSessionInfo *session_info,
+                                      const ObRawExpr *val_ref,
+                                      const ObRawExpr *col_ref,
+                                      ObRawExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+  ObOpRawExpr *greater_expr = NULL;
+  if (OB_FAIL(expr_factory.create_raw_expr(T_OP_GE, greater_expr))) {
+    LOG_WARN("create equal expr failed", K(ret));
+  } else if (OB_ISNULL(expr = greater_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("equal expr is null");
+  } else if (OB_FAIL(greater_expr->set_param_exprs(const_cast<ObRawExpr*>(col_ref), const_cast<ObRawExpr*>(val_ref)))) {
+    LOG_WARN("set param expr failed", K(ret));
+  } else if (OB_FAIL(greater_expr->formalize(session_info))) {
+    LOG_WARN("formalize equal expr failed", K(ret));
+  } else {}
+  return ret;
+}
+
 int ObRawExprUtils::create_double_op_expr(ObRawExprFactory &expr_factory,
                                           const ObSQLSessionInfo *session_info,
                                           ObItemType expr_type,

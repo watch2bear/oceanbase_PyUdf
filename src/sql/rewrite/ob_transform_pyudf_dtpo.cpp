@@ -173,7 +173,24 @@ int ObTransformPyUdfDTPO::do_recursive_onnx_decision_tree_prune(ObSelectStmt *se
             for (int i = 0; i < filters.count(); ++i) {
               if (filters.at(i) == cmp_expr) {
                 filters.remove(i);
-                filters.push_back(python_udf_expr);
+                ObConstRawExpr *const_expr = NULL;
+                ObRawExpr *greater_expr = NULL;
+                ObPythonUDFMeta &udf_meta=python_udf_expr->get_udf_meta();
+                python_udf_expr->get_udf_meta().ret_ = ObPythonUdfEnumType::PyUdfRetType::REAL;
+                python_udf_expr->set_data_type(ObDoubleType);
+                if (OB_FAIL(ObRawExprUtils::build_const_double_expr(*ctx_->expr_factory_,
+                                                               ObDoubleType,
+                                                               0.5,
+                                                               const_expr))) {
+                        LOG_WARN("failed to build const bool expr", K(ret));
+                }else if (OB_FAIL(ObRawExprUtils::create_greater_expr(*(ctx_->expr_factory_),
+                                                                      ctx_->session_info_,
+                                                                      const_expr,
+                                                                      python_udf_expr,
+                                                                      greater_expr))) {
+                    LOG_WARN("Creation of equal expr for expr_opted fails", K(ret));
+                }
+                filters.push_back(greater_expr);
                 break;
               }
             }
@@ -181,9 +198,25 @@ int ObTransformPyUdfDTPO::do_recursive_onnx_decision_tree_prune(ObSelectStmt *se
             // 修改parent expr的child expr
             for (int i = 0; i < parent_expr->get_param_count(); ++i) {
               if (parent_expr->get_param_expr(i) == cmp_expr) {
-                python_udf_expr->get_udf_meta().ret_ = ObPythonUdfEnumType::PyUdfRetType::INTEGER;
-                python_udf_expr->set_data_type(ObTinyIntType);
-                parent_expr->get_param_expr(i) = python_udf_expr;
+                //python_udf_expr->get_udf_meta().ret_ = ObPythonUdfEnumType::PyUdfRetType::INTEGER;
+                //python_udf_expr->set_data_type(ObTinyIntType);
+                python_udf_expr->get_udf_meta().ret_ = ObPythonUdfEnumType::PyUdfRetType::REAL;
+                python_udf_expr->set_data_type(ObDoubleType);
+                ObConstRawExpr *const_expr = NULL;
+                ObRawExpr *greater_expr = NULL;
+                if (OB_FAIL(ObRawExprUtils::build_const_double_expr(*ctx_->expr_factory_,
+                                                               ObDoubleType,
+                                                               0.5,
+                                                               const_expr))) {
+                        LOG_WARN("failed to build const bool expr", K(ret));
+                }else if (OB_FAIL(ObRawExprUtils::create_greater_expr(*(ctx_->expr_factory_),
+                                                                      ctx_->session_info_,
+                                                                      const_expr,
+                                                                      python_udf_expr,
+                                                                      greater_expr))) {
+                    LOG_WARN("Creation of equal expr for expr_opted fails", K(ret));
+                }
+                parent_expr->get_param_expr(i) = greater_expr;
                 break;
               }
             }
