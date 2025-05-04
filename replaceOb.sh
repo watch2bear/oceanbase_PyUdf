@@ -12,7 +12,7 @@ echo $loc3
 bash build.sh $1 -DOB_USE_CCACHE=ON --init --make -j
 
 #stop obcluster
-obd cluster stop obcluster
+obd cluster stop obtest
 #wait 
 sleep 3s
 #cp replacement

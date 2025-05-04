@@ -1,5 +1,5 @@
 # IMBridge_CMake
-ob_define(PYTHON_DIR "/usr/local/python311/")
+ob_define(PYTHON_DIR "/usr/local/python/3.11-withssl")
 
 set(PYTHON_LIB_DIR "${PYTHON_DIR}/lib")
 

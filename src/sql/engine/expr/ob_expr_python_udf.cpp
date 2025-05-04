@@ -32,6 +32,9 @@ namespace oceanbase {
 using namespace common;
 namespace sql {
 
+static bool context_reuse_log_ = false;
+static string context_reuse_log_path = "/root/JS_test/log/context_reuse.log";
+
 ObExprPythonUdf::ObExprPythonUdf(ObIAllocator& alloc) : 
   ObExprOperator(alloc, T_FUN_PYTHON_UDF, N_PYTHON_UDF, PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, INTERNAL_IN_MYSQL_MODE), allocator_(alloc), udf_meta_()
 {}
@@ -223,6 +226,12 @@ int ObExprPythonUdf::init_udf(const common::ObIArray<ObRawExpr*> &param_exprs)
 
   if (OB_SUCC(ret)) {
     udf_meta_.init_ = true;
+    if (context_reuse_log_) {
+      std::fstream log_stream;
+      log_stream.open(context_reuse_log_path, std::ios::app);
+      log_stream << std::string(udf_meta_.name_.ptr(), udf_meta_.name_.length())  << " init context" << std::endl;
+      log_stream.close();
+    }
   } else {
     LOG_WARN("fail to init udf", K(ret));
   }
@@ -473,14 +482,21 @@ int ObExprPythonUdf::import_model_udf(const share::schema::ObPythonUDFMeta &udf_
                   std::string("\n\tdef tokenize_text(self, text):") +
                   std::string("\n\t\treturn ' '.join(jieba.cut(text))") +
                   std::string("\n\tdef process_element(self, args, i):") +
-                  std::string("\n\t\tdtype_name = args[i].dtype.name") +
-                  std::string("\n\t\tif dtype_name not in {'str416', 'object'}:") +
-                  std::string("\n\t\t\treturn args[i].astype(self.anonymous_model_type_map[dtype_name]).reshape((-1, 1))") +
-                  std::string("\n\t\telse:") +
-                  std::string("\n\t\t\treturn np.array([self.tokenize_text(text) for text in args[i]], dtype=object).astype(str).reshape((-1, 1))") +
+                  std::string("\n\t\tif isinstance(args[i], tuple):")+
+                  std::string("\n\t\t\tdtype_name = np.array(args[i]).dtype.name")+
+                  std::string("\n\t\t\tif dtype_name in {'int32', 'int64','float64'}:") +
+                  std::string("\n\t\t\t\treturn np.array(args[i]).astype(self.anonymous_model_type_map[dtype_name]).reshape((-1, 1))") +
+                  std::string("\n\t\t\telse:") +
+                  std::string("\n\t\t\t\treturn np.array([self.tokenize_text(text) for text in np.array(args[i])], dtype=object).astype(str).reshape((-1, 1))") +
+                  std::string("\n\t\telse:")+
+                  std::string("\n\t\t\tdtype_name = args[i].dtype.name") +
+                  std::string("\n\t\t\tif dtype_name not in {'str416', 'object', 'str32'}:") +
+                  std::string("\n\t\t\t\treturn args[i].astype(self.anonymous_model_type_map[dtype_name]).reshape((-1, 1))") +
+                  std::string("\n\t\t\telse:") +
+                  std::string("\n\t\t\t\treturn np.array([self.tokenize_text(text) for text in args[i]], dtype=object).astype(str).reshape((-1, 1))") +
                   std::string("\n\tdef pyfun(self, names, args):") +
                   std::string("\n\t\tortconfig = ort.SessionOptions()") + 
-                  std::string("\n\t\tself.anonymous_model_type_map = {'int32': np.int64, 'int64': np.int64, 'float64': np.float32, 'object': str, 'str416': str,}") +
+                  std::string("\n\t\tself.anonymous_model_type_map = {'int32': np.int64, 'int64': np.int64, 'float64': np.float32, 'object': str, 'str416': str, 'str32': str}") +
                   std::string("\n\t\tself.anonymous_model_session = ort.InferenceSession('") + 
                   std::string(udf_meta.udf_model_meta_[0].model_path_.ptr()) + 
                   std::string("', sess_options=ortconfig)") +

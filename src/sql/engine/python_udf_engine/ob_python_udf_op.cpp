@@ -15,7 +15,7 @@ namespace sql
 
 typedef share::schema::ObPythonUdfEnumType::PyUdfRetType PyUdfType;
 
-static bool with_context_reuse_ = false; // 进行上下文复用优化
+static bool with_context_reuse_ = true; // 进行上下文复用优化
 static bool with_batch_control_ = false; // 是否进行batch size控制
 static bool with_transform_opt_ = false; // 是否进行数据传输优化
 static bool with_full_funcache_ = false; // 是否进行粗粒度缓存
@@ -23,7 +23,7 @@ static bool with_fine_funcache_ = false; // 是否进行细粒度缓存
 
 static bool context_reuse_log_ = false; // 打印上下文初始化次数
 static bool batch_control_log_ = false; // 打印批次大小调整过程
-static bool transform_opt_log_ = true; // 打印数据传输开销
+static bool transform_opt_log_ = false; // 打印数据传输开销
 
 
 static string context_reuse_log_path = "/root/JS_test/log/context_reuse.log";
@@ -537,12 +537,6 @@ int ObPythonUDFOp::init_udfs(const common::ObIArray<ObExpr *> &udf_exprs)
         LOG_WARN("Fail to import udf", K(ret));
       } else {
         udf_meta.init_ = true;
-        if (context_reuse_log_) {
-          std::fstream log_stream;
-          log_stream.open(context_reuse_log_path, std::ios::app);
-          log_stream << std::string(udf_meta.name_.ptr(), udf_meta.name_.length())  << " init context" << std::endl;
-          log_stream.close();
-        }
       }
     }
   }
@@ -1114,12 +1108,13 @@ int ObPythonUDFCell::do_process_all(std::vector<std::vector<std::string>>& input
   gettimeofday(&t2, NULL);
   if (batch_control_log_) {
     double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
-    double tps = eval_size * 1000000 / timeuse; // current tuples per sec
-    double time_s = timeuse / 1000;
+    double time_s = timeuse / 1000000;
+    double tps = eval_size / time_s; // current tuples per sec
     std::fstream log_stream;
     log_stream.open(batch_control_log_path, std::ios::app);
     log_stream << "udf name:" << std::string(info->udf_meta_.name_.ptr(), info->udf_meta_.name_.length()) << std::endl;
     log_stream << "batch size: " << eval_size << std::endl;
+    log_stream << "timeuse: " << time_s << std::endl;
     log_stream << "prediction processing speed: " << tps << std::endl;
     log_stream.close();
   }
