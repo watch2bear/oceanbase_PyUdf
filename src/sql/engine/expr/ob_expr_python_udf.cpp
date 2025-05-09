@@ -465,10 +465,11 @@ int ObExprPythonUdf::import_model_udf(const share::schema::ObPythonUDFMeta &udf_
                   std::string("\nimport pandas as pd") +
                   std::string("\nclass ") + class_name + std::string(":") +
                   std::string("\n\tdef pyinitial(self):") +
+                  std::string("\n\t\tpass") +
+                  std::string("\n\tdef pyfun(self, names, args):") +
                   std::string("\n\t\tself.anonymous_model = pickle.load(open('") + 
                   std::string(udf_meta.udf_model_meta_[0].model_path_.ptr()) + 
                   std::string("', 'rb'))") +
-                  std::string("\n\tdef pyfun(self, names, args):") +
                   std::string("\n\t\treturn self.anonymous_model.predict(pd.DataFrame(np.column_stack(args), columns=names))");
         break;
       }

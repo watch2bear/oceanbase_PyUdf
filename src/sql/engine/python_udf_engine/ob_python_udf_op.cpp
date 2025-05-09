@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <typeinfo>
 
 namespace oceanbase
 {
@@ -15,7 +16,7 @@ namespace sql
 
 typedef share::schema::ObPythonUdfEnumType::PyUdfRetType PyUdfType;
 
-static bool with_context_reuse_ = true; // 进行上下文复用优化
+static bool with_context_reuse_ = false; // 进行上下文复用优化
 static bool with_batch_control_ = false; // 是否进行batch size控制
 static bool with_transform_opt_ = false; // 是否进行数据传输优化
 static bool with_full_funcache_ = false; // 是否进行粗粒度缓存
@@ -23,7 +24,7 @@ static bool with_fine_funcache_ = false; // 是否进行细粒度缓存
 
 static bool context_reuse_log_ = false; // 打印上下文初始化次数
 static bool batch_control_log_ = false; // 打印批次大小调整过程
-static bool transform_opt_log_ = false; // 打印数据传输开销
+static bool transform_opt_log_ = true; // 打印数据传输开销
 
 
 static string context_reuse_log_path = "/root/JS_test/log/context_reuse.log";
@@ -2085,12 +2086,19 @@ int ObPythonUDFCell::wrap_input(PyObject *&pArgs, int64_t &eval_size, std::vecto
   }
   gettimeofday(&t2, NULL);
   if (transform_opt_log_) {
-    double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
-    double time_ms = timeuse / 1000; // ms
+    //double timeuse = (t2.tv_sec - t1.tv_sec) * 1000000 + (double)(t2.tv_usec - t1.tv_usec); // usec
+    //double time_ms = timeuse / 1000; // ms
+    std::string type = std::string(PyUnicode_AsUTF8(PyType_GetName(Py_TYPE(PyTuple_GetItem(pArgs, 0)))));
     std::fstream log_stream;
     log_stream.open(transform_opt_log_path, std::ios::app);
     log_stream << "udf name:" << std::string(info->udf_meta_.name_.ptr(), info->udf_meta_.name_.length()) << std::endl;
-    log_stream << "transform time: " << time_ms << " ms" << std::endl;
+    if (type.compare("ndarray") == 0) {
+      log_stream << "transform type: " << "Numpy Array" << std::endl;
+    } else if (type.compare("tuple") == 0) {
+      log_stream << "transform type: " << "PyTuple" << std::endl;
+    } else {
+      log_stream << "transform type: " << "unknown type" << std::endl;
+    }
     log_stream.close();
   }
   return ret;
